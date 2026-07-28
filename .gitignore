@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+dist/
+build/
+
+# Entorno y credenciales (¡NUNCA subir esto!)
+.env
+.env.local
+.env.*.local
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
