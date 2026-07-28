@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../data/supabaseClient'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
-import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 
 function Dashboard({ fincas, personal, maquinaria, params }) {
   const [labores, setLabores] = useState([])
@@ -31,8 +31,6 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
     const d = subMonths(new Date(), i)
     return format(d, 'yyyy-MM')
   })
-
-  const mesesLabels = meses.map(m => format(new Date(m + '-01'), 'MMM yyyy'))
 
   const laboresMes = labores.filter(l => l.fecha && l.fecha.startsWith(selectedMonth))
   const cosechasMes = cosechas.filter(c => c.fecha && c.fecha.startsWith(selectedMonth))
@@ -81,7 +79,7 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
   return (
     <div>
       {/* Selector de mes */}
-      <div className="flex items-center gap-8 mb-24 flex-wrap">
+      <div className="flex items-center gap-12 mb-24 flex-wrap">
         <label className="form-label mb-0">Mes:</label>
         <select
           className="form-select"

@@ -10,19 +10,22 @@ function MobileHeader({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMe
     personal: '👥 Personal',
     maquinaria: '🚜 Maquinaria',
     inventario: '📦 Inventario',
-    configuracion: '⚙️ Configuración',
+    configuracion: '⚙️ Ajustes',
   }[currentPage] || 'AGROtrack'
 
   return (
     <header className="mobile-header">
       <div className="flex items-center justify-between">
         <h1>{pageTitle}</h1>
-        <button
-          className="btn btn-small btn-accent"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? '✕ Cerrar' : '☰ Menú'}
-        </button>
+        <div className="mobile-header-actions">
+          <button
+            className="mobile-header-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Menú"
+          >
+            {mobileMenuOpen ? '✕' : '☰'}
+          </button>
+        </div>
       </div>
     </header>
   )
