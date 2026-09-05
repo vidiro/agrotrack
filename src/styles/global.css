@@ -10,6 +10,7 @@
   --color-primary-dark: #0d2818;
   --color-accent: #d4a017;
   --color-accent-light: #f0c929;
+  --color-white: #ffffff;
   
   /* Fondos y textos */
   --color-bg: #f8f9fa;
@@ -43,7 +44,7 @@
   --radius-full: 9999px;
   
   /* Tipografía */
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -60,6 +61,32 @@
   --spacing-lg: 24px;
   --spacing-xl: 32px;
   --spacing-2xl: 48px;
+
+  /* Transiciones suaves para modo oscuro */
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ============================================
+   MODO OSCURO
+   ============================================ */
+:root.dark {
+  --color-bg: #121212;
+  --color-surface: #1e1e1e;
+  --color-text: #e0e0e0;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #666666;
+  --color-border: #333333;
+  --color-primary: #2d6a4f;
+  --color-primary-light: #40916c;
+  --color-primary-dark: #1a472a;
+  --color-danger-light: #3d1f24;
+  --color-success-light: #1a3a2a;
+  --color-info-light: #1a2a3d;
+  --color-warning-light: #3d3520;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -134,9 +161,19 @@ body {
   padding: 0 12px;
 }
 
+.nav-menu li {
+  list-style: none;
+}
+
 .nav-item {
+  width: 100%;
   padding: 12px 16px;
   margin: 4px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -145,6 +182,25 @@ body {
   font-size: 0.95rem;
   transition: background 0.2s;
   user-select: none;
+}
+
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin-top: 8px;
+}
+
+.sidebar-user {
+  font-size: 0.75rem;
+  opacity: 0.75;
+  padding: 8px 16px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .nav-item:hover {
@@ -178,7 +234,7 @@ body {
   display: none;
   background: var(--color-surface);
   color: var(--color-text);
-  padding: 12px 16px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   position: sticky;
   top: 0;
   z-index: 90;
@@ -247,13 +303,17 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   font-size: 0.7rem;
+  font-family: inherit;
+  background: none;
+  border: none;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
   min-width: 56px;
+  flex: 1;
   border-radius: var(--radius-md);
 }
 
@@ -358,6 +418,28 @@ body {
 
 .btn-full {
   width: 100%;
+}
+
+/* Botón con estado de carga */
+.btn-loading {
+  opacity: 0.7;
+  pointer-events: none;
+  position: relative;
+}
+
+.btn-loading::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  margin-left: 8px;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Formularios */
@@ -672,6 +754,21 @@ body {
 
   .bottom-nav {
     display: block;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 99;
+    cursor: pointer;
+  }
+
+  .sidebar {
+    z-index: 101;
   }
 
   /* Grid de resumen en móvil */
@@ -1025,3 +1122,178 @@ body {
 .rounded-lg { border-radius: var(--radius-lg); }
 .rounded-xl { border-radius: var(--radius-xl); }
 .rounded-full { border-radius: var(--radius-full); }
+
+/* ============================================
+   Login, arranque y hoja "Más"
+   ============================================ */
+
+.boot-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, var(--color-primary-light), var(--color-primary-dark));
+}
+
+.login-theme-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  font-size: 1.25rem;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-xl);
+  padding: 32px 24px;
+  box-shadow: var(--shadow-xl);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.login-brand h1 {
+  color: var(--color-primary);
+  font-size: 1.75rem;
+}
+
+.login-brand p {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  margin-top: 6px;
+}
+
+.login-form .form-label {
+  margin-top: 12px;
+}
+
+.login-hint {
+  margin-top: 20px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field .form-input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 8px;
+}
+
+.more-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 110;
+  display: flex;
+  align-items: flex-end;
+}
+
+.more-sheet {
+  width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-xl);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.more-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  margin: 4px auto 12px;
+}
+
+.more-sheet-title {
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+  color: var(--color-primary);
+}
+
+.more-sheet-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.more-sheet-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-height: 88px;
+}
+
+.more-sheet-item.active {
+  border-color: var(--color-primary);
+  background: rgba(26, 71, 42, 0.08);
+  font-weight: 600;
+}
+
+.more-sheet-icon {
+  font-size: 1.5rem;
+}
+
+@media (min-width: 769px) {
+  .more-sheet-backdrop {
+    display: none;
+  }
+}

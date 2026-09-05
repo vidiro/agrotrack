@@ -1,18 +1,6 @@
-function Sidebar({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen }) {
-  const navItems = [
-    { id: 'dashboard', icon: '🏠', label: 'Inicio' },
-    { id: 'labores', icon: '📝', label: 'Labores' },
-    { id: 'aplicaciones', icon: '🧪', label: 'Aplicaciones' },
-    { id: 'cosechas', icon: '🍇', label: 'Cosechas' },
-    { id: 'gastos', icon: '💰', label: 'Gastos' },
-    { id: 'finanzas', icon: '📊', label: 'Finanzas' },
-    { id: 'fincas', icon: '🌍', label: 'Fincas' },
-    { id: 'personal', icon: '👥', label: 'Personal' },
-    { id: 'maquinaria', icon: '🚜', label: 'Maquinaria' },
-    { id: 'inventario', icon: '📦', label: 'Inventario' },
-    { id: 'configuracion', icon: '⚙️', label: 'Configuración' },
-  ]
+import { ALL_NAV } from '../data/nav'
 
+function Sidebar({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen, darkMode, toggleDarkMode, userEmail, onLogout }) {
   return (
     <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
@@ -20,20 +8,35 @@ function Sidebar({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpe
         <p>Gestión Agrícola</p>
       </div>
       <ul className="nav-menu">
-        {navItems.map(item => (
-          <li
-            key={item.id}
-            className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentPage(item.id)
-              setMobileMenuOpen(false)
-            }}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span>{item.label}</span>
+        {ALL_NAV.map(item => (
+          <li key={item.id}>
+            <button
+              type="button"
+              className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+              onClick={() => {
+                setCurrentPage(item.id)
+                setMobileMenuOpen(false)
+              }}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
           </li>
         ))}
       </ul>
+      <div className="sidebar-footer">
+        <button type="button" className="nav-item" onClick={toggleDarkMode}>
+          <span className="nav-icon">{darkMode ? '☀️' : '🌙'}</span>
+          <span>{darkMode ? 'Modo claro' : 'Modo oscuro'}</span>
+        </button>
+        {userEmail && (
+          <p className="sidebar-user" title={userEmail}>{userEmail}</p>
+        )}
+        <button type="button" className="nav-item" onClick={onLogout}>
+          <span className="nav-icon">🚪</span>
+          <span>Cerrar sesión</span>
+        </button>
+      </div>
     </aside>
   )
 }

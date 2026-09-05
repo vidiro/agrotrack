@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../data/supabaseClient'
 
-function MaquinariaPage({ maquinaria }) {
+function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
+  const [maquinaria, setMaquinaria] = useState(maquinariaOrig)
+  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [form, setForm] = useState({
     id_equipo: '',
@@ -15,6 +20,29 @@ function MaquinariaPage({ maquinaria }) {
     mantenimiento_periodicidad: ''
   })
 
+  const loadMaquinaria = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data, error: err } = await supabase.from('maquinaria').select('*').order('id_equipo')
+      if (err) throw err
+      setMaquinaria(data || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadMaquinaria()
+  }, [])
+
+  // Sincronizar con los datos del padre si cambian
+  useEffect(() => {
+    setMaquinaria(maquinariaOrig)
+  }, [maquinariaOrig])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm({ ...form, [name]: value })
@@ -24,6 +52,7 @@ function MaquinariaPage({ maquinaria }) {
     e.preventDefault()
     setError('')
     setSuccess('')
+    setSaving(true)
 
     const datos = {
       ...form,
@@ -35,11 +64,17 @@ function MaquinariaPage({ maquinaria }) {
 
     try {
       if (editingId) {
-        setSuccess('Maquinaria actualizada')
+        const { error: err } = await supabase.from('maquinaria').update(datos).eq('id_equipo', editingId)
+        if (err) throw new Error(err.message)
+        setSuccess('Maquinaria actualizada correctamente')
       } else {
-        setSuccess('Maquinaria registrada')
+        const { error: err } = await supabase.from('maquinaria').insert([datos])
+        if (err) throw new Error(err.message)
+        setSuccess('Maquinaria registrada correctamente')
       }
-      
+
+      await loadMaquinaria()
+      onDataChange?.()
       setForm({
         id_equipo: '', tipo: 'Tractor', marca_modelo: '', coste_h: '', consumo_l_h: '', mantenimiento_periodicidad: ''
       })
@@ -48,7 +83,9 @@ function MaquinariaPage({ maquinaria }) {
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
       setError(err.message)
-      setTimeout(() => setError(''), 5000)
+      // NO cerramos el formulario si falla
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -65,10 +102,44 @@ function MaquinariaPage({ maquinaria }) {
     setShowForm(true)
   }
 
+  const handleDelete = async (id) => {
+    if (!confirm('¿Eliminar esta maquinaria? Esta acción no se puede deshacer.')) return
+    try {
+      const { error: err } = await supabase.from('maquinaria').delete().eq('id_equipo', id)
+      if (err) throw err
+      await loadMaquinaria()
+      onDataChange?.()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Filtrar por búsqueda
+  const filteredMaquinaria = maquinaria.filter(m => {
+    if (!searchTerm.trim()) return true
+    const term = searchTerm.toLowerCase()
+    return (m.marca_modelo || '').toLowerCase().includes(term) ||
+           (m.tipo || '').toLowerCase().includes(term)
+  })
+
+  if (loading) {
+    return (
+      <div className="empty-state" aria-busy="true">
+        <div className="spinner"></div>
+        <p className="mt-16">Cargando maquinaria...</p>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {success && <div className="alert alert-success">✅ {success}</div>}
-      {error && <div className="alert alert-error">⚠️ {error}</div>}
+      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {error && (
+        <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span>⚠️ {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadMaquinaria} aria-label="Reintentar">🔄 Reintentar</button>
+        </div>
+      )}
 
       <div className="summary-grid" style={{ marginBottom: 16 }}>
         <div className="summary-card">
@@ -77,7 +148,22 @@ function MaquinariaPage({ maquinaria }) {
         </div>
       </div>
 
-      <div className="flex gap-16 mb-16">
+      {/* Barra de búsqueda */}
+      <div className="fincas-toolbar mb-16">
+        <div className="search-box">
+          <span className="search-icon">🔍</span>
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Buscar por marca, tipo..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Buscar maquinaria"
+          />
+          {searchTerm && (
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+          )}
+        </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
           {showForm ? '✕ Cancelar' : '+ Nueva Maquinaria'}
         </button>
@@ -107,56 +193,72 @@ function MaquinariaPage({ maquinaria }) {
                   <option value="Otros">Otros</option>
                 </select>
               </div>
+            </div>
+            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Marca/Modelo</label>
-                <input type="text" name="marca_modelo" className="form-input" value={form.marca_modelo} onChange={handleChange} placeholder="Deutz_DX3.90, John Deere_1750..." />
+                <label className="form-label">Marca / Modelo</label>
+                <input type="text" name="marca_modelo" className="form-input" value={form.marca_modelo} onChange={handleChange} placeholder="ej: Massey Ferguson 2705" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Coste/hora (€)</label>
+                <input type="number" name="coste_h" className="form-input" value={form.coste_h} onChange={handleChange} step="0.5" min="0" />
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Coste hora (€)</label>
-                <input type="number" name="coste_h" className="form-input" value={form.coste_h} onChange={handleChange} step="0.01" min="0" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Consumo (L/h)</label>
-                <input type="number" name="consumo_l_h" className="form-input" value={form.consumo_l_h} onChange={handleChange} step="0.1" min="0" />
+                <label className="form-label">Consumo gasoil (L/h)</label>
+                <input type="number" name="consumo_l_h" className="form-input" value={form.consumo_l_h} onChange={handleChange} step="0.1" min="0" placeholder="Litros por hora" />
               </div>
               <div className="form-group">
                 <label className="form-label">Mantenimiento</label>
-                <input type="text" name="mantenimiento_periodicidad" className="form-input" value={form.mantenimiento_periodicidad} onChange={handleChange} placeholder="Cada X horas" />
+                <input type="text" name="mantenimiento_periodicidad" className="form-input" value={form.mantenimiento_periodicidad} onChange={handleChange} placeholder="ej: cada 500h" />
               </div>
             </div>
-            <button type="submit" className="btn btn-primary btn-full">
-              {editingId ? '💾 Guardar cambios' : '✅ Registrar maquinaria'}
+            <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
+              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar maquinaria'}
             </button>
           </form>
         </div>
       )}
 
-      {/* Tarjetas de maquinaria */}
-      <div className="maquinaria-grid">
-        {maquinaria.length > 0 ? (
-          maquinaria.map(m => (
-            <div key={m.id_equipo} className="maquinaria-card">
-              <div className="maquinaria-card-header">
-                <span className="maquinaria-card-name">{m.marca_modelo || m.tipo}</span>
-                <span className="badge badge-green">{m.tipo}</span>
-              </div>
-              <div className="maquinaria-card-info">
-                <div className="info-row">🆔 {m.id_equipo}</div>
-                {m.coste_h && <div className="info-row">💰 {m.coste_h.toFixed(2)} €/h</div>}
-                {m.consumo_l_h && <div className="info-row">⛽ {m.consumo_l_h} L/h</div>}
-                {m.mantenimiento_periodicidad && <div className="info-row">🔧 {m.mantenimiento_periodicidad}</div>}
-              </div>
-              <div className="maquinaria-card-actions">
-                <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)}>✏️ Editar</button>
-              </div>
-            </div>
-          ))
+      <div className="card">
+        <div className="card-title">📋 Equipos registrados ({filteredMaquinaria.length})</div>
+        {filteredMaquinaria.length > 0 ? (
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Tipo</th>
+                  <th>Marca/Modelo</th>
+                  <th>Coste/h</th>
+                  <th>Consumo L/h</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMaquinaria.map(m => (
+                  <tr key={m.id_equipo}>
+                    <td><strong>{m.id_equipo}</strong></td>
+                    <td><span className="badge badge-blue">{m.tipo}</span></td>
+                    <td>{m.marca_modelo || '-'}</td>
+                    <td>{m.coste_h ? `${m.coste_h.toFixed(2)} €` : '-'}</td>
+                    <td>{m.consumo_l_h ? `${m.consumo_l_h} L` : '-'}</td>
+                    <td>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)} aria-label={`Editar maquinaria ${m.marca_modelo || m.tipo}`}>✏️</button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(m.id_equipo)} aria-label={`Eliminar maquinaria ${m.marca_modelo || m.tipo}`}>🗑️</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🚜</div>
-            <div className="empty-state-text">No hay maquinaria registrada</div>
+            <div className="empty-state-text">
+              {searchTerm ? 'No se encontró maquinaria con esa búsqueda' : 'No hay equipos registrados'}
+            </div>
           </div>
         )}
       </div>

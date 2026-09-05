@@ -1,31 +1,67 @@
 import { useState, useEffect } from 'react'
-import { supabase } from './data/supabaseClient'
+import { supabase, isSupabaseConfigured } from './data/supabaseClient'
+import LoginPage from './components/LoginPage'
 import Sidebar from './components/Sidebar'
 import MobileHeader from './components/MobileHeader'
 import BottomNav from './components/BottomNav'
+import MoreSheet from './components/MoreSheet'
 import Dashboard from './components/Dashboard'
 import LaboresPage from './components/LaboresPage'
 import AplicacionesPage from './components/AplicacionesPage'
 import CosechasPage from './components/CosechasPage'
 import GastosPage from './components/GastosPage'
+import IngresosPage from './components/IngresosPage'
 import FinanzasPage from './components/FinanzasPage'
 import FincasPage from './components/FincasPage'
+import FincaDetailPage from './components/FincaDetailPage'
 import PersonalPage from './components/PersonalPage'
 import MaquinariaPage from './components/MaquinariaPage'
 import InventarioPage from './components/InventarioPage'
 import ConfiguracionPage from './components/ConfiguracionPage'
 
 function App() {
+  const [session, setSession] = useState(undefined)
   const [currentPage, setCurrentPage] = useState('dashboard')
+  const [selectedFincaForDetail, setSelectedFincaForDetail] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [fincas, setFincas] = useState([])
   const [personal, setPersonal] = useState([])
   const [maquinaria, setMaquinaria] = useState([])
   const [params, setParams] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('agrotrack-dark-mode')
+    if (saved !== null) return saved === 'true'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
 
-  // Cargar datos iniciales
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    localStorage.setItem('agrotrack-dark-mode', String(darkMode))
+  }, [darkMode])
+
+  const toggleDarkMode = () => setDarkMode(prev => !prev)
+
+  useEffect(() => {
+    let mounted = true
+    supabase.auth.getSession().then(({ data: { session: next } }) => {
+      if (mounted) setSession(next ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next ?? null)
+    })
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -49,23 +85,55 @@ function App() {
       setParams(paramsRes.data || [])
     } catch (err) {
       console.error('Error cargando datos:', err)
-      setError('No se pudieron cargar los datos. Verifica tu conexión a internet.')
+      setError('No se pudieron cargar los datos. Comprueba la conexión y que hayas ejecutado la migración SQL v1.3.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Cargar datos al iniciar (una sola vez, tras el montaje)
   useEffect(() => {
+    if (session) loadData()
+  }, [session])
+
+  const handleLogout = async () => {
+    setMobileMenuOpen(false)
+    setMoreOpen(false)
+    await supabase.auth.signOut()
+  }
+
+  const onDataChange = () => {
     loadData()
-  }, [])
+  }
+
+  if (session === undefined) {
+    return (
+      <div className="boot-screen" aria-busy="true">
+        <div className="spinner"></div>
+        <p>Cargando AGROtrack...</p>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <LoginPage darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+  }
 
   const renderPage = () => {
     const pageProps = {
       fincas,
       personal,
       maquinaria,
-      params
+      params,
+      onDataChange,
+      darkMode,
+      toggleDarkMode,
+      userEmail: session.user?.email,
+      onLogout: handleLogout,
+      onNavigate: (page, fincaId) => {
+        if (fincaId) setSelectedFincaForDetail(fincaId)
+        setCurrentPage(page)
+      },
+      selectedFincaForDetail,
     }
 
     switch (currentPage) {
@@ -79,10 +147,14 @@ function App() {
         return <CosechasPage {...pageProps} />
       case 'gastos':
         return <GastosPage {...pageProps} />
+      case 'ingresos':
+        return <IngresosPage {...pageProps} />
       case 'finanzas':
         return <FinanzasPage {...pageProps} />
       case 'fincas':
         return <FincasPage {...pageProps} />
+      case 'finca_detalle':
+        return <FincaDetailPage {...pageProps} />
       case 'personal':
         return <PersonalPage {...pageProps} />
       case 'maquinaria':
@@ -98,36 +170,71 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* Sidebar (escritorio) */}
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Cerrar menú"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       <Sidebar
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+        userEmail={session.user?.email}
+        onLogout={handleLogout}
       />
 
-      {/* Cabecera móvil */}
       <MobileHeader
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
       />
 
-      {/* Contenido principal */}
       <main className="main-content">
+        {!isSupabaseConfigured && (
+          <div className="alert alert-error">
+            Faltan variables de entorno de Supabase. Usa <code>.env</code> en local o configúralas en Vercel.
+          </div>
+        )}
         {error && (
           <div className="alert alert-error">
             ⚠️ {error}
+            <button type="button" className="btn btn-small btn-primary" style={{ marginLeft: 12 }} onClick={loadData}>
+              Reintentar
+            </button>
           </div>
         )}
-        {renderPage()}
+        {loading && fincas.length === 0 && !error ? (
+          <div className="empty-state" aria-busy="true">
+            <div className="spinner"></div>
+            <p className="mt-16">Cargando datos...</p>
+          </div>
+        ) : (
+          renderPage()
+        )}
       </main>
 
-      {/* Navegación inferior (móvil) */}
+      <MoreSheet
+        open={moreOpen}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        onClose={() => setMoreOpen(false)}
+      />
+
       <BottomNav
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
+        moreOpen={moreOpen}
+        setMoreOpen={setMoreOpen}
       />
     </div>
   )

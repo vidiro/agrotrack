@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '../data/supabaseClient'
 
-function FincasPage({ fincas }) {
+function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
+  const [fincas, setFincas] = useState(fincasOrig)
+  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('nombre')
   const [sortDir, setSortDir] = useState('asc')
@@ -23,23 +27,44 @@ function FincasPage({ fincas }) {
     notas: ''
   })
 
+  const loadFincas = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data, error: err } = await supabase.from('fincas').select('*').order('nombre')
+      if (err) throw err
+      setFincas(data || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadFincas()
+  }, [])
+
+  // Sincronizar con los datos del padre si cambian
+  useEffect(() => {
+    setFincas(fincasOrig)
+  }, [fincasOrig])
+
   // Filtrar y ordenar fincas
   const filteredFincas = useMemo(() => {
     let result = [...fincas]
-    
-    // Búsqueda
+
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase()
-      result = result.filter(f => 
+      result = result.filter(f =>
         f.nombre?.toLowerCase().includes(term) ||
         f.termino_municipal?.toLowerCase().includes(term) ||
-        f.id_finca?.toLowerCase().includes(term) ||
+        String(f.id_finca).toLowerCase().includes(term) ||
         f.poligono?.toLowerCase().includes(term) ||
         f.parcela?.toLowerCase().includes(term)
       )
     }
-    
-    // Ordenar
+
     result.sort((a, b) => {
       let valA, valB
       switch (sortBy) {
@@ -52,7 +77,7 @@ function FincasPage({ fincas }) {
       if (typeof valA === 'string') return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA)
       return sortDir === 'asc' ? valA - valB : valB - valA
     })
-    
+
     return result
   }, [fincas, searchTerm, sortBy, sortDir])
 
@@ -72,9 +97,49 @@ function FincasPage({ fincas }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    // This would need a refetch or callback from parent
-    setSuccess(editingId ? 'Finca actualizada' : 'Finca registrada')
-    setTimeout(() => setSuccess(''), 3000)
+    setError('')
+    setSuccess('')
+    setSaving(true)
+
+    const datos = {
+      ...form,
+      superficie_total_ha: form.superficie_total_ha ? parseFloat(form.superficie_total_ha) : null,
+      ano_plantacion: form.ano_plantacion ? parseInt(form.ano_plantacion) : null,
+      termino_municipal: form.termino_municipal || null,
+      tipo_suelo: form.tipo_suelo || null,
+      variedad: form.variedad || null,
+      poligono: form.poligono || null,
+      parcela: form.parcela || null,
+      notas: form.notas || null
+    }
+
+    try {
+      if (editingId) {
+        const { error: err } = await supabase.from('fincas').update(datos).eq('id_finca', editingId)
+        if (err) throw new Error(err.message)
+        setSuccess('Finca actualizada correctamente')
+      } else {
+        const { error: err } = await supabase.from('fincas').insert([datos])
+        if (err) throw new Error(err.message)
+        setSuccess('Finca registrada correctamente')
+      }
+
+      await loadFincas()
+      onDataChange?.()
+      setForm({
+        id_finca: '', nombre: '', termino_municipal: '', superficie_total_ha: '',
+        tipo_suelo: '', cultivo: 'Viña', variedad: '', ano_plantacion: '',
+        poligono: '', parcela: '', notas: ''
+      })
+      setEditingId(null)
+      setShowForm(false)
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setError(err.message)
+      // NO cerramos el formulario si falla
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleEdit = (f) => {
@@ -95,6 +160,18 @@ function FincasPage({ fincas }) {
     setShowForm(true)
   }
 
+  const handleDelete = async (id) => {
+    if (!confirm('¿Eliminar esta finca? Esta acción no se puede deshacer.')) return
+    try {
+      const { error: err } = await supabase.from('fincas').delete().eq('id_finca', id)
+      if (err) throw err
+      await loadFincas()
+      onDataChange?.()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const totalHa = fincas.reduce((sum, f) => sum + (f.superficie_total_ha || 0), 0)
   const fincasVina = fincas.filter(f => f.cultivo && f.cultivo.includes('Viña')).length
   const fincasOlivar = fincas.filter(f => f.cultivo && f.cultivo.includes('Olivar') && !f.cultivo.includes('Viña')).length
@@ -106,10 +183,24 @@ function FincasPage({ fincas }) {
     return 'yellow'
   }
 
+  if (loading) {
+    return (
+      <div className="empty-state" aria-busy="true">
+        <div className="spinner"></div>
+        <p className="mt-16">Cargando fincas...</p>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {success && <div className="alert alert-success">✅ {success}</div>}
-      {error && <div className="alert alert-error">⚠️ {error}</div>}
+      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {error && (
+        <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span>⚠️ {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadFincas} aria-label="Reintentar">🔄 Reintentar</button>
+        </div>
+      )}
 
       {/* Tarjetas resumen */}
       <div className="summary-grid">
@@ -141,9 +232,10 @@ function FincasPage({ fincas }) {
             placeholder="Buscar finca, municipio, polígono..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Buscar fincas"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')}>✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
           )}
         </div>
         <div className="sort-buttons">
@@ -152,6 +244,7 @@ function FincasPage({ fincas }) {
               key={field}
               className={`sort-btn ${sortBy === field ? 'active' : ''}`}
               onClick={() => toggleSort(field)}
+              aria-label={`Ordenar por ${field}`}
             >
               {field === 'nombre' ? '📋 Nombre' : field === 'superficie' ? '📏 Superficie' : field === 'cultivo' ? '🌱 Cultivo' : '📅 Año'}
               {sortBy === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
@@ -224,8 +317,8 @@ function FincasPage({ fincas }) {
               <label className="form-label">Notas</label>
               <textarea name="notas" className="form-textarea" value={form.notas} onChange={handleChange} />
             </div>
-            <button type="submit" className="btn btn-primary btn-full">
-              {editingId ? '💾 Guardar cambios' : '✅ Registrar finca'}
+            <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
+              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar finca'}
             </button>
           </form>
         </div>
@@ -253,7 +346,9 @@ function FincasPage({ fincas }) {
               </div>
               {f.notas && <p className="finca-card-notes">{f.notas}</p>}
               <div className="finca-card-actions">
-                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)}>✏️ Editar</button>
+                <button className="btn btn-small" onClick={() => onNavigate?.('finca_detalle', f.id_finca)} style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }} aria-label={`Ver detalle ${f.nombre}`}>📋 Detalle</button>
+                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)} aria-label={`Editar finca ${f.nombre}`}>✏️ Editar</button>
+                <button className="btn btn-small btn-danger" onClick={() => handleDelete(f.id_finca)} aria-label={`Eliminar finca ${f.nombre}`}>🗑️</button>
               </div>
             </div>
           ))

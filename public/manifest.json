@@ -4,14 +4,27 @@
   "description": "Aplicación de gestión agrícola para fincas de viña y olivar",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#1a472a",
   "theme_color": "#1a472a",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚜</text></svg>",
-      "type": "image/svg+xml",
+      "src": "/icon-192.png",
+      "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ]
 }

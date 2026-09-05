@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../data/supabaseClient'
 
-function ConfiguracionPage({ params: paramsOrig }) {
+function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogout }) {
   const [params, setParams] = useState(paramsOrig)
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [editingParam, setEditingParam] = useState(null)
   const [newParamValue, setNewParamValue] = useState('')
 
@@ -15,32 +16,43 @@ function ConfiguracionPage({ params: paramsOrig }) {
 
   const loadParams = async () => {
     setLoading(true)
-    const { data } = await supabase.from('params').select('*')
-    setParams(data || [])
-    setLoading(false)
+    setError('')
+    try {
+      const { data, error: err } = await supabase.from('params').select('*')
+      if (err) throw err
+      setParams(data || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleUpdateParam = async (param) => {
     setError('')
     setSuccess('')
+    setSaving(true)
 
     try {
-      const { error } = await supabase.from('params').update({ valor: parseFloat(newParamValue) }).eq('clave', param.clave)
-      if (error) throw new Error(error.message)
+      const { error: err } = await supabase.from('params').update({ valor: parseFloat(newParamValue) }).eq('clave', param.clave)
+      if (err) throw new Error(err.message)
       setSuccess(`Parámetro "${param.clave}" actualizado a ${newParamValue}`)
       await loadParams()
+      onDataChange?.()
       setEditingParam(null)
       setNewParamValue('')
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
       setError(err.message)
-      setTimeout(() => setError(''), 5000)
+      // NO cerramos el editor si falla
+    } finally {
+      setSaving(false)
     }
   }
 
   if (loading) {
     return (
-      <div className="empty-state">
+      <div className="empty-state" aria-busy="true">
         <div className="spinner"></div>
         <p className="mt-16">Cargando configuración...</p>
       </div>
@@ -49,8 +61,23 @@ function ConfiguracionPage({ params: paramsOrig }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success">✅ {success}</div>}
-      {error && <div className="alert alert-error">⚠️ {error}</div>}
+      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {error && (
+        <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span>⚠️ {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadParams} aria-label="Reintentar">🔄 Reintentar</button>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title">👤 Sesión</div>
+        <p className="text-muted text-sm mb-16">
+          Conectado como <strong>{userEmail || 'usuario'}</strong>
+        </p>
+        <button type="button" className="btn btn-danger" onClick={onLogout}>
+          Cerrar sesión
+        </button>
+      </div>
 
       <div className="card">
         <div className="card-title">⚙️ Parámetros de configuración</div>
@@ -92,9 +119,11 @@ function ConfiguracionPage({ params: paramsOrig }) {
                     </td>
                     <td>
                       {editingParam === p.clave ? (
-                        <button className="btn btn-small btn-primary" onClick={() => handleUpdateParam(p)}>💾 Guardar</button>
+                        <button className={`btn btn-small btn-primary ${saving ? 'btn-loading' : ''}`} onClick={() => handleUpdateParam(p)} disabled={saving}>
+                          {saving ? 'Guardando...' : '💾 Guardar'}
+                        </button>
                       ) : (
-                        <button className="btn btn-small btn-accent" onClick={() => { setEditingParam(p.clave); setNewParamValue(p.valor.toString()) }}>✏️ Editar</button>
+                        <button className="btn btn-small btn-accent" onClick={() => { setEditingParam(p.clave); setNewParamValue(p.valor.toString()) }} aria-label={`Editar parámetro ${p.clave}`}>✏️ Editar</button>
                       )}
                     </td>
                   </tr>
@@ -116,7 +145,7 @@ function ConfiguracionPage({ params: paramsOrig }) {
           <table className="data-table">
             <tbody>
               <tr><td><strong>Nombre</strong></td><td>AGROtrack</td></tr>
-              <tr><td><strong>Versión</strong></td><td>1.0.0</td></tr>
+              <tr><td><strong>Versión</strong></td><td>1.3.0</td></tr>
               <tr><td><strong>Tecnología</strong></td><td>React + Vite + Supabase</td></tr>
               <tr><td><strong>Soporte</strong></td><td>iPhone (Safari), iPad, Ordenador</td></tr>
               <tr><td><strong>Base de datos</strong></td><td>Supabase (PostgreSQL)</td></tr>
@@ -129,8 +158,9 @@ function ConfiguracionPage({ params: paramsOrig }) {
       <div className="card mt-24">
         <div className="card-title">🔐 Seguridad</div>
         <div className="alert alert-info">
-          <strong>Importante:</strong> No compartas nunca tus credenciales de Supabase (URL y clave anon) con nadie. 
-          Si crees que han sido comprometidas, ve a Supabase → Settings → API y genera nuevas credenciales.
+          <strong>Acceso:</strong> la app exige inicio de sesión. Crea usuarios en Supabase → Authentication → Users (no hay registro público).
+          Ejecuta <code>docs/SQL_migracion_v1.3.sql</code> para bloquear lecturas anónimas.
+          Las claves van en <code>.env</code> o en las variables de Vercel, nunca en el código.
         </div>
       </div>
 
