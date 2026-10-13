@@ -1,4 +1,5 @@
 import { MORE_NAV } from '../data/nav'
+import { getIcon } from '../utils/lucideIcons'
 
 function MoreSheet({ open, currentPage, setCurrentPage, onClose }) {
   if (!open) return null
@@ -23,8 +24,9 @@ function MoreSheet({ open, currentPage, setCurrentPage, onClose }) {
                   setCurrentPage(item.id)
                   onClose()
                 }}
+                aria-label={item.label}
               >
-                <span className="more-sheet-icon" aria-hidden="true">{item.icon}</span>
+                <span className="more-sheet-icon" aria-hidden="true">{getIcon(item.icon, { size: 24, strokeWidth: 2 })}</span>
                 <span>{item.label}</span>
               </button>
             </li>

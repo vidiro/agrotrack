@@ -133,11 +133,11 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadMaquinaria} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadMaquinaria} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
@@ -151,7 +151,7 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -161,17 +161,17 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
             aria-label="Buscar maquinaria"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nueva Maquinaria'}
+          {showForm ? ' Cancelar' : '+ Nueva Maquinaria'}
         </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <div className="card-title">🚜 {editingId ? 'Editar Maquinaria' : 'Nueva Maquinaria'}</div>
+          <div className="card-title"> {editingId ? 'Editar Maquinaria' : 'Nueva Maquinaria'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -215,14 +215,14 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
               </div>
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar maquinaria'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar maquinaria'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Equipos registrados ({filteredMaquinaria.length})</div>
+        <div className="card-title"> Equipos registrados ({filteredMaquinaria.length})</div>
         {filteredMaquinaria.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -245,8 +245,8 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
                     <td>{m.coste_h ? `${m.coste_h.toFixed(2)} €` : '-'}</td>
                     <td>{m.consumo_l_h ? `${m.consumo_l_h} L` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)} aria-label={`Editar maquinaria ${m.marca_modelo || m.tipo}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(m.id_equipo)} aria-label={`Eliminar maquinaria ${m.marca_modelo || m.tipo}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)} aria-label={`Editar maquinaria ${m.marca_modelo || m.tipo}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(m.id_equipo)} aria-label={`Eliminar maquinaria ${m.marca_modelo || m.tipo}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -255,7 +255,7 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🚜</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontró maquinaria con esa búsqueda' : 'No hay equipos registrados'}
             </div>

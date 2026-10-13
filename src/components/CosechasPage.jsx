@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
 
-function CosechasPage({ fincas, onDataChange }) {
+function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }) {
   const [cosechas, setCosechas] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -21,6 +21,7 @@ function CosechasPage({ fincas, onDataChange }) {
     cultivo: 'Viña',
     variedad: '',
     kg: '',
+    kg_perdigon: '',
     destino: '',
     brix_baume_viina: '',
     rendimiento_graso_olivar: '',
@@ -51,17 +52,87 @@ function CosechasPage({ fincas, onDataChange }) {
     setForm({ ...form, [name]: value })
   }
 
+  // Helper: obtener precio desde params
+  const getParam = (clave) => {
+    if (!params || !Array.isArray(params)) return 0
+    const p = params.find(pr => pr.clave === clave)
+    return p ? (parseFloat(p.valor) || 0) : 0
+  }
+
+  // Helper: obtener precio desde precios_destino
+  const getPrecioDestino = (nombreDestino, tipoProducto) => {
+    if (!destinos || !Array.isArray(destinos) || !nombreDestino) return 0
+    // Find destino by name
+    const dest = destinos.find(d => d.nombre === nombreDestino)
+    if (!dest) return 0
+    // Find price for this destino and product type
+    const precio = (preciosDestino || []).find(p => String(p.id_destino) === String(dest.id_destino) && p.tipo_producto === tipoProducto)
+    return precio ? (parseFloat(precio.precio) || 0) : 0
+  }
+
+  // Helper: calcular ingreso previsto para una cosecha
+  const calcIngreso = (c) => {
+    try {
+      const kg = parseFloat(c.kg) || 0
+      const kgPerdigon = parseFloat(c.kg_perdigon) || 0
+      const kilogrados = cosechaKilogrados(c) || 0
+      const cult = (c.cultivo || '').toLowerCase()
+      const variedad = (c.variedad || '').toLowerCase()
+      const nombreDestino = c.destino // stored as nombre text
+      let total = 0
+
+      // Intentar precio por destino primero
+      if (nombreDestino) {
+        if (cult === 'viña' || cult === 'viña y olivar') {
+          const p = getPrecioDestino(nombreDestino, 'uva')
+          if (p > 0 && kilogrados > 0) total += kilogrados * p
+        }
+        if (cult === 'olivar' || cult === 'viña y olivar') {
+          if (kgPerdigon > 0) {
+            total += kgPerdigon * getPrecioDestino(nombreDestino, 'perdigon')
+          }
+          if (kg > 0) {
+            let tipo = 'aceituna' // fallback
+            if (variedad.includes('manzanilla')) tipo = 'manzanilla'
+            else if (variedad.includes('carrasquena') || variedad.includes('carrasqueña')) tipo = 'carrasquena'
+            total += kg * getPrecioDestino(nombreDestino, tipo)
+          }
+        }
+      }
+
+      // Si no hay precio por destino, usar precios base de params
+      if (total === 0) {
+        if (cult === 'viña' || cult === 'viña y olivar') {
+          const precio = getParam('precio_uva_kilogrado')
+          if (precio > 0 && kilogrados > 0) total += kilogrados * precio
+        }
+        if (cult === 'olivar' || cult === 'viña y olivar') {
+          if (kgPerdigon > 0) total += kgPerdigon * getParam('precio_perdigon_kg')
+          if (kg > 0) {
+            let precio = 0
+            if (variedad.includes('manzanilla')) precio = getParam('precio_manzanilla_kg')
+            else if (variedad.includes('carrasquena') || variedad.includes('carrasqueña')) precio = getParam('precio_carrasquena_kg')
+            else precio = getParam('precio_basta_kg')
+            if (precio > 0) total += kg * precio
+          }
+        }
+      }
+
+      return total
+    } catch {
+      return 0
+    }
+  }
+
   // Valor en vivo del formulario: kilogrados (viña) o aceite potencial (olivar)
   const formKilogrados = useMemo(() => {
     const esVina = form.cultivo === 'Viña' || form.cultivo === 'Viña y Olivar'
     const esOlivar = form.cultivo === 'Olivar' || form.cultivo === 'Viña y Olivar'
     const kg = parseFloat(form.kg) || 0
-    // Viña: kilogrados
     if (esVina) {
       const brix = parseFloat(form.brix_baume_viina) || 0
       if (kg && brix) return { value: kg * brix, label: 'kilogrados' }
     }
-    // Olivar: aceite potencial
     if (esOlivar) {
       const pct = parseFloat(form.rendimiento_graso_olivar) || 0
       if (kg && pct) return { value: kg * pct / 100, label: 'kg aceite potencial' }
@@ -69,7 +140,7 @@ function CosechasPage({ fincas, onDataChange }) {
     return null
   }, [form.kg, form.brix_baume_viina, form.rendimiento_graso_olivar, form.cultivo])
 
-  // Filtrar por búsqueda (necesario antes de calcular el resumen)
+  // Filtrar por búsqueda
   const filteredCosechas = cosechas.filter(c => {
     if (!searchTerm.trim()) return true
     const term = searchTerm.toLowerCase()
@@ -78,31 +149,82 @@ function CosechasPage({ fincas, onDataChange }) {
            (c.destino || '').toLowerCase().includes(term)
   })
 
-  // === RESUMEN: total, % por variedad y kilogrados ===
+  // === RESUMEN separado por tipo de cultivo ===
   const resumen = useMemo(() => {
-    const totalKg = filteredCosechas.reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
-    const totalKilogrados = filteredCosechas.reduce((s, c) => s + (cosechaKilogrados(c) || 0), 0)
-
-    // Agrupar por variedad
-    const porVariedad = {}
-    filteredCosechas.forEach(c => {
-      const v = c.variedad || c.cultivo || 'Sin clasificar'
-      if (!porVariedad[v]) porVariedad[v] = { variedad: v, kg: 0, kilogrados: 0, n: 0 }
-      porVariedad[v].kg += parseFloat(c.kg) || 0
-      porVariedad[v].kilogrados += cosechaKilogrados(c) || 0
-      porVariedad[v].n += 1
+    const cosechasVina = filteredCosechas.filter(c => {
+      const cult = (c.cultivo || '')
+      return cult === 'Viña' || cult === 'Viña y Olivar'
+    })
+    const cosechasOlivar = filteredCosechas.filter(c => {
+      const cult = (c.cultivo || '')
+      return cult === 'Olivar' || cult === 'Viña y Olivar'
     })
 
-    const porVariedadArr = Object.values(porVariedad)
+    const totalKg = filteredCosechas.reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
+
+    // --- Viña ---
+    const vinaKg = cosechasVina.reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
+    const vinaKilogrados = cosechasVina.reduce((s, c) => s + (cosechaKilogrados(c) || 0), 0)
+
+    const vinaPorVariedad = {}
+    cosechasVina.forEach(c => {
+      const v = c.variedad || 'Sin variedad'
+      if (!vinaPorVariedad[v]) vinaPorVariedad[v] = { variedad: v, kg: 0, kilogrados: 0, n: 0 }
+      vinaPorVariedad[v].kg += parseFloat(c.kg) || 0
+      vinaPorVariedad[v].kilogrados += cosechaKilogrados(c) || 0
+      vinaPorVariedad[v].n += 1
+    })
+    const vinaVariedades = Object.values(vinaPorVariedad)
       .map(v => ({
         ...v,
-        pctKg: totalKg > 0 ? (v.kg / totalKg) * 100 : 0,
-        pctKilogrados: totalKilogrados > 0 ? (v.kilogrados / totalKilogrados) * 100 : 0
+        pctKg: vinaKg > 0 ? (v.kg / vinaKg) * 100 : 0,
+        pctKilogrados: vinaKilogrados > 0 ? (v.kilogrados / vinaKilogrados) * 100 : 0,
+        ingreso: cosechasVina
+          .filter(c => (c.variedad || 'Sin variedad') === v.variedad)
+          .reduce((s, c) => s + calcIngreso(c), 0)
       }))
       .sort((a, b) => b.kg - a.kg)
 
-    return { totalKg, totalKilogrados, porVariedad: porVariedadArr, numVariedades: porVariedadArr.length, numCosechas: filteredCosechas.length }
-  }, [filteredCosechas])
+    // --- Olivar ---
+    const olivarKg = cosechasOlivar.reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
+    const olivarPerdigon = cosechasOlivar.reduce((s, c) => s + (parseFloat(c.kg_perdigon) || 0), 0)
+    const olivarAceite = cosechasOlivar.reduce((s, c) => s + (cosechaAceite(c) || 0), 0)
+
+    const olivarPorVariedad = {}
+    cosechasOlivar.forEach(c => {
+      const v = c.variedad || 'Sin variedad'
+      if (!olivarPorVariedad[v]) olivarPorVariedad[v] = { variedad: v, kg: 0, kg_perdigon: 0, aceite: 0, n: 0 }
+      olivarPorVariedad[v].kg += parseFloat(c.kg) || 0
+      olivarPorVariedad[v].kg_perdigon += parseFloat(c.kg_perdigon) || 0
+      olivarPorVariedad[v].aceite += cosechaAceite(c) || 0
+      olivarPorVariedad[v].n += 1
+    })
+    const olivarIngresoPorVariedad = {}
+    cosechasOlivar.forEach(c => {
+      const v = c.variedad || 'Sin variedad'
+      if (!olivarIngresoPorVariedad[v]) olivarIngresoPorVariedad[v] = 0
+      olivarIngresoPorVariedad[v] += calcIngreso(c)
+    })
+    const olivarVariedades = Object.values(olivarPorVariedad)
+      .map(v => ({
+        ...v,
+        pctKg: olivarKg > 0 ? (v.kg / olivarKg) * 100 : 0,
+        pctAceite: olivarAceite > 0 ? (v.aceite / olivarAceite) * 100 : 0,
+        ingreso: olivarIngresoPorVariedad[v.variedad] || 0
+      }))
+      .sort((a, b) => b.kg - a.kg)
+
+    const vinaIngreso = cosechasVina.reduce((s, c) => s + calcIngreso(c), 0)
+    const olivarIngreso = cosechasOlivar.reduce((s, c) => s + calcIngreso(c), 0)
+
+    return {
+      totalKg,
+      numCosechas: filteredCosechas.length,
+      vinaKg, vinaKilogrados, vinaNumCosechas: cosechasVina.length, vinaVariedades, vinaIngreso,
+      olivarKg, olivarPerdigon, olivarAceite, olivarNumCosechas: cosechasOlivar.length, olivarVariedades, olivarIngreso,
+      totalIngreso: vinaIngreso + olivarIngreso
+    }
+  }, [filteredCosechas, params, destinos, preciosDestino])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -118,6 +240,7 @@ function CosechasPage({ fincas, onDataChange }) {
       cultivo: form.cultivo || null,
       variedad: form.variedad || null,
       kg: form.kg ? parseFloat(form.kg) : null,
+      kg_perdigon: form.kg_perdigon ? parseFloat(form.kg_perdigon) : null,
       destino: form.destino || null,
       brix_baume_viina: form.brix_baume_viina ? parseFloat(form.brix_baume_viina) : null,
       rendimiento_graso_olivar: form.rendimiento_graso_olivar ? parseFloat(form.rendimiento_graso_olivar) : null,
@@ -141,7 +264,7 @@ function CosechasPage({ fincas, onDataChange }) {
       setForm({
         fecha: format(new Date(), 'yyyy-MM-dd'),
         id_finca: '', id_parcela: '', cultivo: 'Viña', variedad: '',
-        kg: '', destino: '', brix_baume_viina: '',
+        kg: '', kg_perdigon: '', destino: '', brix_baume_viina: '',
         rendimiento_graso_olivar: '', muestras_calidad: '', observaciones: ''
       })
       setEditingId(null)
@@ -149,7 +272,6 @@ function CosechasPage({ fincas, onDataChange }) {
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
       setError(err.message)
-      // NO cerramos el formulario si falla
     } finally {
       setSaving(false)
     }
@@ -163,6 +285,7 @@ function CosechasPage({ fincas, onDataChange }) {
       cultivo: c.cultivo || 'Viña',
       variedad: c.variedad || '',
       kg: c.kg || '',
+      kg_perdigon: c.kg_perdigon || '',
       destino: c.destino || '',
       brix_baume_viina: c.brix_baume_viina || '',
       rendimiento_graso_olivar: c.rendimiento_graso_olivar || '',
@@ -196,18 +319,18 @@ function CosechasPage({ fincas, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -217,83 +340,196 @@ function CosechasPage({ fincas, onDataChange }) {
             aria-label="Buscar cosechas"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nueva Cosecha'}
+          {showForm ? ' Cancelar' : '+ Nueva Cosecha'}
         </button>
       </div>
 
       {/* Resumen de cosecha */}
       {resumen.numCosechas > 0 && (
         <>
+          {/* Tarjetas generales */}
           <div className="summary-grid" style={{ marginBottom: 16 }}>
             <div className="summary-card accent">
               <div className="summary-value">{resumen.totalKg.toFixed(0)} kg</div>
               <div className="summary-label">Total cosechado</div>
             </div>
-            <div className="summary-card">
-              <div className="summary-value">{resumen.totalKilogrados.toFixed(0)}</div>
-              <div className="summary-label">Kilogrados totales</div>
-            </div>
             <div className="summary-card success">
               <div className="summary-value">{resumen.numCosechas}</div>
-              <div className="summary-label">Cosechas</div>
+              <div className="summary-label">Cosechas registradas</div>
             </div>
-            <div className="summary-card">
-              <div className="summary-value">{resumen.numVariedades}</div>
-              <div className="summary-label">Variedades</div>
+            <div className="summary-card" style={{ background: 'var(--color-success-light)', borderLeft: '4px solid var(--color-success)' }}>
+              <div className="summary-value" style={{ color: 'var(--color-success)' }}>{resumen.totalIngreso > 0 ? resumen.totalIngreso.toFixed(2) + ' €' : '—'}</div>
+              <div className="summary-label"> Ingreso previsto</div>
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="card-title">📈 Aporte por variedad</div>
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Variedad</th>
-                    <th>Kg</th>
-                    <th>% kg</th>
-                    <th>Kilogrados</th>
-                    <th>% kilogrados</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumen.porVariedad.map(v => (
-                    <tr key={v.variedad}>
-                      <td><strong>{v.variedad}</strong></td>
-                      <td>{v.kg.toFixed(0)} kg</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ flex: 1, height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ width: `${v.pctKg}%`, height: '100%', background: 'var(--color-primary)' }} />
-                          </div>
-                          <span style={{ fontSize: '0.75rem', minWidth: '3.2em', textAlign: 'right' }}>{v.pctKg.toFixed(1)}%</span>
-                        </div>
-                      </td>
-                      <td>{v.kilogrados > 0 ? v.kilogrados.toFixed(0) : '—'}</td>
-                      <td>{v.kilogrados > 0 ? `${v.pctKilogrados.toFixed(1)}%` : '—'}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ background: 'var(--color-primary-light)', fontWeight: 700 }}>
-                    <td>Total</td>
-                    <td>{resumen.totalKg.toFixed(0)} kg</td>
-                    <td>100%</td>
-                    <td>{resumen.totalKilogrados > 0 ? resumen.totalKilogrados.toFixed(0) : '—'}</td>
-                    <td>{resumen.totalKilogrados > 0 ? '100%' : '—'}</td>
-                  </tr>
-                </tbody>
-              </table>
+          {/* Aviso si no hay precios configurados */}
+          {resumen.totalIngreso === 0 && (
+            <div className="alert alert-info" role="alert" style={{ marginBottom: 16, fontSize: '0.875rem' }}>
+               Configura los precios de cosecha en <strong>Configuración</strong> para ver los ingresos previstos
             </div>
-          </div>
+          )}
+
+          {/* ===== SECCIÓN VIÑA ===== */}
+          {resumen.vinaNumCosechas > 0 && (
+            <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid var(--vina-accent)' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '1.3rem' }}></span> Viña
+              </div>
+
+              {/* Stats de viña */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 120, background: 'var(--vina-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--vina-accent)' }}>{resumen.vinaKg.toFixed(0)} kg</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--vina-accent-light)' }}>Uva cosechada</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, background: 'var(--vina-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--vina-accent)' }}>{resumen.vinaKilogrados > 0 ? resumen.vinaKilogrados.toFixed(0) : '—'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--vina-accent-light)' }}>Kilogrados</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, background: 'var(--vina-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--vina-accent)' }}>{resumen.vinaNumCosechas}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--vina-accent-light)' }}>Entradas</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, background: 'var(--color-success-light)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-success)' }}>{resumen.vinaIngreso > 0 ? resumen.vinaIngreso.toFixed(2) + ' €' : '—'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-success)' }}> Ingreso previsto</div>
+                </div>
+              </div>
+
+              {/* Tabla por variedad */}
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Variedad</th>
+                      <th>Kg</th>
+                      <th>% kg</th>
+                      <th>Kilogrados</th>
+                      <th>% kilogrados</th>
+                      <th>Ingreso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumen.vinaVariedades.map(v => (
+                      <tr key={v.variedad}>
+                        <td><strong>{v.variedad}</strong></td>
+                        <td>{v.kg.toFixed(0)} kg</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${v.pctKg}%`, height: '100%', background: 'var(--vina-accent)' }} />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', minWidth: '3.2em', textAlign: 'right' }}>{v.pctKg.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                        <td>{v.kilogrados > 0 ? v.kilogrados.toFixed(0) : '—'}</td>
+                        <td>{v.kilogrados > 0 ? `${v.pctKilogrados.toFixed(1)}%` : '—'}</td>
+                        <td style={{ color: 'var(--color-success)', fontWeight: 600 }}>{v.ingreso > 0 ? v.ingreso.toFixed(2) + ' €' : '—'}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: 'var(--vina-bg)', fontWeight: 700 }}>
+                      <td>Total viña</td>
+                      <td>{resumen.vinaKg.toFixed(0)} kg</td>
+                      <td>100%</td>
+                      <td>{resumen.vinaKilogrados > 0 ? resumen.vinaKilogrados.toFixed(0) : '—'}</td>
+                      <td>{resumen.vinaKilogrados > 0 ? '100%' : '—'}</td>
+                      <td style={{ color: 'var(--color-success)' }}>{resumen.vinaIngreso > 0 ? resumen.vinaIngreso.toFixed(2) + ' €' : '—'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ===== SECCIÓN OLIVAR ===== */}
+          {resumen.olivarNumCosechas > 0 && (
+            <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid var(--olivar-accent)' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '1.3rem' }}>🫒</span> Olivar
+              </div>
+
+              {/* Stats de olivar */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 100, background: 'var(--olivar-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--olivar-accent)' }}>{resumen.olivarKg.toFixed(0)} kg</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--olivar-accent-light)' }}>Aceituna</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 100, background: 'var(--olivar-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--olivar-accent)' }}>{resumen.olivarPerdigon > 0 ? resumen.olivarPerdigon.toFixed(0) + ' kg' : '—'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--olivar-accent-light)' }}>Pérdigon</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 100, background: 'var(--olivar-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--olivar-accent)' }}>{resumen.olivarAceite > 0 ? resumen.olivarAceite.toFixed(0) + ' kg' : '—'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--olivar-accent-light)' }}>Aceite pot.</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 100, background: 'var(--olivar-bg)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--olivar-accent)' }}>{resumen.olivarNumCosechas}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--olivar-accent-light)' }}>Entradas</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 100, background: 'var(--color-success-light)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-success)' }}>{resumen.olivarIngreso > 0 ? resumen.olivarIngreso.toFixed(2) + ' €' : '—'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-success)' }}> Ingreso previsto</div>
+                </div>
+              </div>
+
+              {/* Tabla por variedad */}
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Variedad</th>
+                      <th>Kg aceituna</th>
+                      <th>% kg</th>
+                      <th>Pérdigon</th>
+                      <th>Aceite pot.</th>
+                      <th>% aceite</th>
+                      <th>Ingreso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumen.olivarVariedades.map(v => (
+                      <tr key={v.variedad}>
+                        <td><strong>{v.variedad}</strong></td>
+                        <td>{v.kg.toFixed(0)} kg</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${v.pctKg}%`, height: '100%', background: 'var(--olivar-accent)' }} />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', minWidth: '3.2em', textAlign: 'right' }}>{v.pctKg.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                        <td>{v.kg_perdigon > 0 ? v.kg_perdigon.toFixed(0) + ' kg' : '—'}</td>
+                        <td>{v.aceite > 0 ? v.aceite.toFixed(0) + ' kg' : '—'}</td>
+                        <td>{v.aceite > 0 ? `${v.pctAceite.toFixed(1)}%` : '—'}</td>
+                        <td style={{ color: 'var(--color-success)', fontWeight: 600 }}>{v.ingreso > 0 ? v.ingreso.toFixed(2) + ' €' : '—'}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: 'var(--olivar-bg)', fontWeight: 700 }}>
+                      <td>Total olivar</td>
+                      <td>{resumen.olivarKg.toFixed(0)} kg</td>
+                      <td>100%</td>
+                      <td>{resumen.olivarPerdigon > 0 ? resumen.olivarPerdigon.toFixed(0) + ' kg' : '—'}</td>
+                      <td>{resumen.olivarAceite > 0 ? resumen.olivarAceite.toFixed(0) + ' kg' : '—'}</td>
+                      <td>{resumen.olivarAceite > 0 ? '100%' : '—'}</td>
+                      <td style={{ color: 'var(--color-success)' }}>{resumen.olivarIngreso > 0 ? resumen.olivarIngreso.toFixed(2) + ' €' : '—'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
 
       {showForm && (
         <div className="card">
-          <div className="card-title">🍇 {editingId ? 'Editar Cosecha' : 'Nueva Cosecha'}</div>
+          <div className="card-title"> {editingId ? 'Editar Cosecha' : 'Nueva Cosecha'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -334,7 +570,12 @@ function CosechasPage({ fincas, onDataChange }) {
               </div>
               <div className="form-group">
                 <label className="form-label">Destino</label>
-                <input type="text" name="destino" className="form-input" value={form.destino} onChange={handleChange} placeholder="Bodega, mercado..." />
+                <select name="destino" className="form-select" value={form.destino} onChange={handleChange}>
+                  <option value="">Sin destino</option>
+                  {(destinos || []).map(d => (
+                    <option key={d.id_destino} value={d.nombre}>{d.nombre} ({d.tipo || 'Otro'})</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="form-row">
@@ -342,6 +583,13 @@ function CosechasPage({ fincas, onDataChange }) {
                 <label className="form-label">Kg producidos</label>
                 <input type="number" name="kg" className="form-input" value={form.kg} onChange={handleChange} step="0.01" min="0" />
               </div>
+              {(form.cultivo === 'Olivar' || form.cultivo === 'Viña y Olivar') && (
+                <div className="form-group">
+                  <label className="form-label">Kg pérdigon</label>
+                  <input type="number" name="kg_perdigon" className="form-input" value={form.kg_perdigon} onChange={handleChange} step="0.01" min="0" placeholder="Aceituna de menor tamaño" />
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>Aceituna separada por la cooperativa (pago diferente)</div>
+                </div>
+              )}
             </div>
             {(form.cultivo === 'Viña' || form.cultivo === 'Viña y Olivar') && (
               <div className="form-group">
@@ -359,7 +607,7 @@ function CosechasPage({ fincas, onDataChange }) {
               <div className="form-group">
                 <label className="form-label">Cálculo automático</label>
                 <div style={{ padding: '10px 12px', background: 'var(--color-primary-light)', border: '1px solid var(--color-primary)', borderRadius: 8, fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-primary)' }}>
-                  📊 {formKilogrados.value.toFixed(0)} {formKilogrados.label}
+                   {formKilogrados.value.toFixed(0)} {formKilogrados.label}
                 </div>
               </div>
             )}
@@ -372,14 +620,14 @@ function CosechasPage({ fincas, onDataChange }) {
               <textarea name="observaciones" className="form-textarea" value={form.observaciones} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar cosecha'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar cosecha'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Cosechas registradas ({filteredCosechas.length})</div>
+        <div className="card-title"> Cosechas registradas ({filteredCosechas.length})</div>
         {filteredCosechas.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -390,6 +638,7 @@ function CosechasPage({ fincas, onDataChange }) {
                   <th>Cultivo</th>
                   <th>Variedad</th>
                   <th>Kg</th>
+                  <th>Pérdigon</th>
                   <th>Destino</th>
                   <th>Brix/Baume</th>
                   <th>Kilogrados</th>
@@ -404,12 +653,13 @@ function CosechasPage({ fincas, onDataChange }) {
                     <td>{c.cultivo || '-'}</td>
                     <td>{c.variedad || '-'}</td>
                     <td><strong>{c.kg ? c.kg.toFixed(0) : '-'}</strong></td>
+                    <td>{c.kg_perdigon ? `${c.kg_perdigon.toFixed(0)} kg` : '-'}</td>
                     <td>{c.destino || '-'}</td>
                     <td>{c.brix_baume_viina ? `${c.brix_baume_viina}°` : (c.rendimiento_graso_olivar ? `${c.rendimiento_graso_olivar}%` : '-')}</td>
                     <td>{cosechaKilogrados(c) != null ? `${cosechaKilogrados(c).toFixed(0)} kg°` : (cosechaAceite(c) != null ? `${cosechaAceite(c).toFixed(0)} kg ace.` : '-')}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(c)} aria-label={`Editar cosecha ${c.variedad || c.cultivo}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(c.id_cosecha)} aria-label={`Eliminar cosecha ${c.variedad || c.cultivo}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(c)} aria-label={`Editar cosecha ${c.variedad || c.cultivo}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(c.id_cosecha)} aria-label={`Eliminar cosecha ${c.variedad || c.cultivo}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -418,7 +668,7 @@ function CosechasPage({ fincas, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🍇</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">No hay cosechas registradas</div>
           </div>
         )}

@@ -20,15 +20,12 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   // Precio del gasoil desde params
   const precioGasoilL = getParamValue(params, ['precio_gasoil_l', 'coste_gasoleo'], 0)
 
-  // Formulario: un registro por día
-  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Otros']
+  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Vendimia', 'Cogida de aceitunas', 'Otros']
 
+  // Formulario: una jornada con múltiples secciones
   const [form, setForm] = useState({
     fecha: format(new Date(), 'yyyy-MM-dd'),
-    tipo_trabajo: '',
-    fincas: [], // [{ id_finca, peones: [{ id_operario, horas }] }]
-    maquinaria: [], // [{ id_equipo, horas }]
-    include_gasoil: true,
+    secciones: [], // [{ tipo_trabajo, fincas: [{ id_finca, peones: [{ id_operario, horas }] }], maquinaria: [{ id_equipo, horas }], include_gasoil }]
     notas: ''
   })
 
@@ -59,16 +56,46 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   // Helper para comparar IDs (texto o número)
   const idEq = (a, b) => String(a) === String(b)
 
-  // === CÁLCULO DE COSTES ===
-  const calcularCostes = (fincasData, maquinariaData, includeGasoil) => {
+  // === PARSEAR LABORES (legacy → secciones) ===
+  const parseSecciones = (labor) => {
+    // Si ya tiene secciones en asignaciones_fincas (nuevo formato)
+    const raw = labor.asignaciones_fincas
+    if (raw) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      // Si es un array donde el primer elemento tiene 'tipo_trabajo', es formato secciones
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].tipo_trabajo !== undefined) {
+        return parsed
+      }
+      // Si es formato legacy (array de fincas sin tipo_trabajo)
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id_finca !== undefined) {
+        const maqData = labor.asignaciones_maquinaria ? (typeof labor.asignaciones_maquinaria === 'string' ? JSON.parse(labor.asignaciones_maquinaria) : labor.asignaciones_maquinaria) : []
+        return [{
+          tipo_trabajo: labor.tipo_trabajo || '',
+          fincas: parsed,
+          maquinaria: Array.isArray(maqData) ? maqData : [],
+          include_gasoil: labor.include_gasoil !== false
+        }]
+      }
+    }
+    // Sin asignaciones_fincas → labor antigua sin secciones
+    return [{
+      tipo_trabajo: labor.tipo_trabajo || '',
+      fincas: [],
+      maquinaria: [],
+      include_gasoil: labor.include_gasoil !== false
+    }]
+  }
+
+  // === CÁLCULO DE COSTES POR SECCIÓN ===
+  const calcularCostesSeccion = (seccion) => {
     let costePeones = 0
     let costeMaquinaria = 0
     let costeGasoil = 0
     let totalHorasPeones = 0
     let totalHorasMaq = 0
 
-    if (fincasData) {
-      for (const fincaAsign of fincasData) {
+    if (seccion.fincas) {
+      for (const fincaAsign of seccion.fincas) {
         if (fincaAsign.peones) {
           for (const peon of fincaAsign.peones) {
             const horas = parseFloat(peon.horas) || 0
@@ -81,15 +108,15 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
       }
     }
 
-    if (maquinariaData) {
-      for (const maqAsign of maquinariaData) {
+    if (seccion.maquinaria) {
+      for (const maqAsign of seccion.maquinaria) {
         const horas = parseFloat(maqAsign.horas) || 0
         const equipo = maquinaria.find(m => idEq(m.id_equipo, maqAsign.id_equipo))
         if (equipo) {
           const costeHora = equipo.coste_h || 0
           costeMaquinaria += horas * costeHora
           totalHorasMaq += horas
-          if (includeGasoil && equipo.consumo_l_h && precioGasoilL) {
+          if (seccion.include_gasoil && equipo.consumo_l_h && precioGasoilL) {
             costeGasoil += horas * equipo.consumo_l_h * precioGasoilL
           }
         }
@@ -99,80 +126,140 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     return { costePeones, costeMaquinaria, costeGasoil, totalHorasPeones, totalHorasMaq, total: costePeones + costeMaquinaria + costeGasoil }
   }
 
-  const costes = useMemo(() => calcularCostes(form.fincas, form.maquinaria, form.include_gasoil), [form.fincas, form.maquinaria, form.include_gasoil, personal, maquinaria, precioGasoilL])
+  // Costes totales de todas las secciones
+  const costes = useMemo(() => {
+    let total = 0, totalPeones = 0, totalMaq = 0, totalGasoil = 0, totalHorasPeones = 0, totalHorasMaq = 0
+    for (const sec of form.secciones) {
+      const c = calcularCostesSeccion(sec)
+      total += c.total
+      totalPeones += c.costePeones
+      totalMaq += c.costeMaquinaria
+      totalGasoil += c.costeGasoil
+      totalHorasPeones += c.totalHorasPeones
+      totalHorasMaq += c.totalHorasMaq
+    }
+    return { costePeones: totalPeones, costeMaquinaria: totalMaq, costeGasoil: totalGasoil, totalHorasPeones, totalHorasMaq, total }
+  }, [form.secciones, personal, maquinaria, precioGasoilL])
 
-  // === GESTIÓN DE FINCAS ===
-  const addFincaToForm = (fincaId) => {
+  // === GESTIÓN DE SECCIONES ===
+  const addSection = () => {
+    setForm(prev => ({
+      ...prev,
+      secciones: [...prev.secciones, { tipo_trabajo: '', fincas: [], maquinaria: [], include_gasoil: true }]
+    }))
+  }
+
+  const removeSection = (idx) => {
+    setForm(prev => ({
+      ...prev,
+      secciones: prev.secciones.filter((_, i) => i !== idx)
+    }))
+  }
+
+  const updateSection = (idx, field, value) => {
+    setForm(prev => ({
+      ...prev,
+      secciones: prev.secciones.map((s, i) => i === idx ? { ...s, [field]: value } : s)
+    }))
+  }
+
+  // === GESTIÓN DE FINCAS DENTRO DE SECCIÓN ===
+  const addFincaToSection = (secIdx, fincaId) => {
     const id = String(fincaId)
-    if (form.fincas.some(f => idEq(f.id_finca, id))) return
+    const sec = form.secciones[secIdx]
+    if (sec.fincas.some(f => idEq(f.id_finca, id))) return
     setForm(prev => ({
       ...prev,
-      fincas: [...prev.fincas, { id_finca: id, peones: [] }]
-    }))
-  }
-
-  const removeFincaFromForm = (fincaId) => {
-    setForm(prev => ({
-      ...prev,
-      fincas: prev.fincas.filter(f => !idEq(f.id_finca, fincaId))
-    }))
-  }
-
-  const addPeonToFinca = (fincaId) => {
-    setForm(prev => ({
-      ...prev,
-      fincas: prev.fincas.map(f =>
-        idEq(f.id_finca, fincaId)
-          ? { ...f, peones: [...f.peones, { id_operario: '', horas: '' }] }
-          : f
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? { ...s, fincas: [...s.fincas, { id_finca: id, peones: [] }] } : s
       )
     }))
   }
 
-  const removePeonFromFinca = (fincaId, index) => {
+  const removeFincaFromSection = (secIdx, fincaId) => {
     setForm(prev => ({
       ...prev,
-      fincas: prev.fincas.map(f =>
-        idEq(f.id_finca, fincaId)
-          ? { ...f, peones: f.peones.filter((_, i) => i !== index) }
-          : f
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? { ...s, fincas: s.fincas.filter(f => !idEq(f.id_finca, fincaId)) } : s
       )
     }))
   }
 
-  const updatePeonInFinca = (fincaId, index, field, value) => {
+  const addPeonToFincaInSection = (secIdx, fincaId) => {
     setForm(prev => ({
       ...prev,
-      fincas: prev.fincas.map(f =>
-        idEq(f.id_finca, fincaId)
-          ? { ...f, peones: f.peones.map((p, i) => i === index ? { ...p, [field]: value } : p) }
-          : f
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? {
+          ...s,
+          fincas: s.fincas.map(f =>
+            idEq(f.id_finca, fincaId) ? { ...f, peones: [...f.peones, { id_operario: '', horas: '' }] } : f
+          )
+        } : s
       )
     }))
   }
 
-  // === GESTIÓN DE MAQUINARIA ===
-  const addMaquinaToForm = (equipoId) => {
+  const removePeonFromFincaInSection = (secIdx, fincaId, peonIdx) => {
+    setForm(prev => ({
+      ...prev,
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? {
+          ...s,
+          fincas: s.fincas.map(f =>
+            idEq(f.id_finca, fincaId) ? { ...f, peones: f.peones.filter((_, idx) => idx !== peonIdx) } : f
+          )
+        } : s
+      )
+    }))
+  }
+
+  const updatePeonInFincaInSection = (secIdx, fincaId, peonIdx, field, value) => {
+    setForm(prev => ({
+      ...prev,
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? {
+          ...s,
+          fincas: s.fincas.map(f =>
+            idEq(f.id_finca, fincaId) ? {
+              ...f,
+              peones: f.peones.map((p, pi) => pi === peonIdx ? { ...p, [field]: value } : p)
+            } : f
+          )
+        } : s
+      )
+    }))
+  }
+
+  // === GESTIÓN DE MAQUINARIA DENTRO DE SECCIÓN ===
+  const addMaquinaToSection = (secIdx, equipoId) => {
     const id = String(equipoId)
-    if (form.maquinaria.some(m => idEq(m.id_equipo, id))) return
+    const sec = form.secciones[secIdx]
+    if (sec.maquinaria.some(m => idEq(m.id_equipo, id))) return
     setForm(prev => ({
       ...prev,
-      maquinaria: [...prev.maquinaria, { id_equipo: id, horas: '' }]
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? { ...s, maquinaria: [...s.maquinaria, { id_equipo: id, horas: '' }] } : s
+      )
     }))
   }
 
-  const removeMaquinaFromForm = (equipoId) => {
+  const removeMaquinaFromSection = (secIdx, equipoId) => {
     setForm(prev => ({
       ...prev,
-      maquinaria: prev.maquinaria.filter(m => !idEq(m.id_equipo, equipoId))
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? { ...s, maquinaria: s.maquinaria.filter(m => !idEq(m.id_equipo, equipoId)) } : s
+      )
     }))
   }
 
-  const updateMaquinaHoras = (equipoId, horas) => {
+  const updateMaquinaHorasInSection = (secIdx, equipoId, horas) => {
     setForm(prev => ({
       ...prev,
-      maquinaria: prev.maquinaria.map(m =>
-        idEq(m.id_equipo, equipoId) ? { ...m, horas } : m
+      secciones: prev.secciones.map((s, i) =>
+        i === secIdx ? {
+          ...s,
+          maquinaria: s.maquinaria.map(m => idEq(m.id_equipo, equipoId) ? { ...m, horas } : m)
+        } : s
       )
     }))
   }
@@ -183,27 +270,44 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     setError('')
     setSuccess('')
 
-    const tienePeones = form.fincas.some(f => f.peones.some(p => p.id_operario && parseFloat(p.horas) > 0))
-    const tieneMaquinaria = form.maquinaria.some(m => parseFloat(m.horas) > 0)
+    // Validar: al menos una sección con contenido
+    const hasContent = form.secciones.some(sec => {
+      const hasPeones = sec.fincas?.some(f => f.peones?.some(p => p.id_operario && parseFloat(p.horas) > 0)) ?? false
+      const hasMaq = sec.maquinaria?.some(m => parseFloat(m.horas) > 0) ?? false
+      return hasPeones || hasMaq
+    })
 
-    if (!tienePeones && !tieneMaquinaria) {
-      setError('Añade al menos un peón con horas o una máquina con horas')
+    if (!hasContent) {
+      setError('Cada sección debe tener al menos un peón con horas o una máquina con horas')
+      return
+    }
+
+    // Validar: cada sección debe tener tipo de trabajo
+    const missingType = form.secciones.some(s => !s.tipo_trabajo)
+    if (missingType) {
+      setError('Cada sección debe tener un tipo de trabajo seleccionado')
       return
     }
 
     setSaving(true)
 
+    // Preparar datos para guardar
+    // asignaciones_fincas → array de secciones (nuevo formato)
+    // asignaciones_maquinaria → maquinaria combinada de todas las secciones (para compatibilidad)
+    const allMaquinaria = form.secciones.flatMap(s => s.maquinaria || [])
+    const allFincas = form.secciones.flatMap(s => s.fincas || [])
+
     const datos = {
       fecha: form.fecha,
-      tipo_trabajo: form.tipo_trabajo || null,
-      id_finca: form.fincas.length > 0 ? form.fincas[0].id_finca : null,
-      asignaciones_fincas: JSON.stringify(form.fincas),
-      asignaciones_maquinaria: JSON.stringify(form.maquinaria),
+      tipo_trabajo: form.secciones.map(s => s.tipo_trabajo).join(', '), // Para búsqueda y display legacy
+      id_finca: allFincas.length > 0 ? allFincas[0].id_finca : null,
+      asignaciones_fincas: JSON.stringify(form.secciones), // Las secciones completas
+      asignaciones_maquinaria: JSON.stringify(allMaquinaria),
       coste_total: costes.total,
       coste_peones: costes.costePeones,
       coste_maquinaria: costes.costeMaquinaria,
       coste_gasoil: costes.costeGasoil,
-      include_gasoil: form.include_gasoil,
+      include_gasoil: true,
       notas: form.notas || null
     }
 
@@ -224,7 +328,6 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
       setError(err.message)
-      // NO cerramos el formulario si falla
     } finally {
       setSaving(false)
     }
@@ -233,10 +336,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   const resetForm = () => {
     setForm({
       fecha: format(new Date(), 'yyyy-MM-dd'),
-      tipo_trabajo: '',
-      fincas: [],
-      maquinaria: [],
-      include_gasoil: true,
+      secciones: [{ tipo_trabajo: '', fincas: [], maquinaria: [], include_gasoil: true }],
       notas: ''
     })
     setEditingId(null)
@@ -245,15 +345,11 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
 
   // === EDITAR ===
   const handleEdit = (labor) => {
-    const fincasData = labor.asignaciones_fincas ? (typeof labor.asignaciones_fincas === 'string' ? JSON.parse(labor.asignaciones_fincas) : labor.asignaciones_fincas) : []
-    const maquinariaData = labor.asignaciones_maquinaria ? (typeof labor.asignaciones_maquinaria === 'string' ? JSON.parse(labor.asignaciones_maquinaria) : labor.asignaciones_maquinaria) : []
+    const secciones = parseSecciones(labor)
 
     setForm({
       fecha: labor.fecha ? format(new Date(labor.fecha), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      tipo_trabajo: labor.tipo_trabajo || '',
-      fincas: fincasData || [],
-      maquinaria: maquinariaData || [],
-      include_gasoil: labor.include_gasoil !== false,
+      secciones,
       notas: labor.notas || ''
     })
     setEditingId(labor.id_labor)
@@ -289,18 +385,25 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     return m ? `${m.tipo} (${m.marca_modelo || 'Sin marca'})` : '-'
   }
 
+  // Para display: obtener info de secciones de una labor
+  const getSeccionesInfo = (labor) => {
+    const secciones = parseSecciones(labor)
+    return secciones
+  }
+
   const getFincaInfo = (labor) => {
-    const fincasData = labor.asignaciones_fincas ? (typeof labor.asignaciones_fincas === 'string' ? JSON.parse(labor.asignaciones_fincas) : labor.asignaciones_fincas) : []
-    if (!fincasData || fincasData.length === 0) return labor.id_finca ? fincaNombre(labor.id_finca) : '-'
-    return fincasData.map(f => fincaNombre(f.id_finca)).join(', ')
+    const secciones = getSeccionesInfo(labor)
+    const allFincas = secciones.flatMap(s => s.fincas || [])
+    if (allFincas.length === 0) return labor.id_finca ? fincaNombre(labor.id_finca) : '-'
+    return [...new Set(allFincas.map(f => fincaNombre(f.id_finca)))].join(', ')
   }
 
   const getPeonesInfo = (labor) => {
-    const fincasData = labor.asignaciones_fincas ? (typeof labor.asignaciones_fincas === 'string' ? JSON.parse(labor.asignaciones_fincas) : labor.asignaciones_fincas) : []
+    const secciones = getSeccionesInfo(labor)
     const allPeones = []
-    for (const fa of fincasData) {
-      if (fa.peones) {
-        for (const p of fa.peones) {
+    for (const sec of secciones) {
+      for (const fa of (sec.fincas || [])) {
+        for (const p of (fa.peones || [])) {
           if (p.id_operario) allPeones.push(`${operarioNombre(p.id_operario)} (${p.horas}h)`)
         }
       }
@@ -309,9 +412,14 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   }
 
   const getMaqInfo = (labor) => {
-    const maqData = labor.asignaciones_maquinaria ? (typeof labor.asignaciones_maquinaria === 'string' ? JSON.parse(labor.asignaciones_maquinaria) : labor.asignaciones_maquinaria) : []
-    if (!maqData || maqData.length === 0) return '-'
-    return maqData.map(m => `${equipoNombre(m.id_equipo)} (${m.horas}h)`).join(', ')
+    const secciones = getSeccionesInfo(labor)
+    const allMaq = secciones.flatMap(s => s.maquinaria || [])
+    if (allMaq.length === 0) return '-'
+    return allMaq.map(m => `${equipoNombre(m.id_equipo)} (${m.horas}h)`).join(', ')
+  }
+
+  const getTipoInfo = (labor) => {
+    return labor.tipo_trabajo || '-'
   }
 
   const filteredLabores = useMemo(() => {
@@ -319,15 +427,16 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     if (filterFinca) {
       result = result.filter(l => {
         if (idEq(l.id_finca, filterFinca)) return true
-        const fincasData = l.asignaciones_fincas ? (typeof l.asignaciones_fincas === 'string' ? JSON.parse(l.asignaciones_fincas) : l.asignaciones_fincas) : []
-        return fincasData?.some(f => idEq(f.id_finca, filterFinca))
+        const secciones = getSeccionesInfo(l)
+        const allFincas = secciones.flatMap(s => s.fincas || [])
+        return allFincas.some(f => idEq(f.id_finca, filterFinca))
       })
     }
     result = result.filter(l => l.fecha && l.fecha.startsWith(filterMonth))
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase()
       result = result.filter(l => {
-        return (l.tipo_trabajo || '').toLowerCase().includes(term) ||
+        return getTipoInfo(l).toLowerCase().includes(term) ||
                getFincaInfo(l).toLowerCase().includes(term) ||
                getPeonesInfo(l).toLowerCase().includes(term) ||
                getMaqInfo(l).toLowerCase().includes(term) ||
@@ -348,31 +457,31 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadLabores} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadLabores} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
       {/* Filtros y Exportar */}
       <div className="fincas-toolbar mb-16" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input type="text" className="search-input" placeholder="Buscar por finca, peón, máquina..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} aria-label="Buscar labores" />
-          {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>}
+          {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>}
         </div>
         <button className="btn btn-small btn-accent" onClick={() => {
           const headers = ['fecha', 'tipo_trabajo', 'fincas', 'peones', 'maquinaria', 'coste_total', 'notas']
           const rows = filteredLabores.map(l => ({
             fecha: l.fecha ? format(new Date(l.fecha), 'dd/MM/yyyy') : '',
-            tipo_trabajo: l.tipo_trabajo || '',
+            tipo_trabajo: getTipoInfo(l),
             fincas: getFincaInfo(l), peones: getPeonesInfo(l), maquinaria: getMaqInfo(l),
             coste_total: l.coste_total ?? 0, notas: l.notas || ''
           }))
           downloadCSV('labores_agrotrack', headers, rows)
-        }} aria-label="Exportar labores como CSV">📥 Exportar CSV</button>
+        }} aria-label="Exportar labores como CSV"> Exportar CSV</button>
       </div>
 
       <div className="flex gap-16 mb-16 flex-wrap">
@@ -387,120 +496,141 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
           }).map(m => <option key={m} value={m}>{format(new Date(m + '-01'), 'MMMM yyyy', { locale: es })}</option>)}
         </select>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nueva Labor'}
+          {showForm ? ' Cancelar' : '+ Nueva Labor'}
         </button>
       </div>
 
       {/* FORMULARIO */}
       {showForm && (
         <div className="card">
-          <div className="card-title">📝 {editingId ? 'Editar Labor' : 'Nueva Labor'}</div>
+          <div className="card-title"> {editingId ? 'Editar Labor' : 'Nueva Labor'}</div>
           <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Fecha *</label>
-                <input type="date" className="form-input" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tipo de trabajo</label>
-                <select className="form-select" value={form.tipo_trabajo} onChange={e => setForm({ ...form, tipo_trabajo: e.target.value })}>
-                  <option value="">Seleccionar tipo...</option>
-                  {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Fecha *</label>
+              <input type="date" className="form-input" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} required />
             </div>
 
-            {/* FINCAS Y PEONES */}
-            <div style={{ marginBottom: 16 }}>
-              <div className="card-title" style={{ fontSize: '1rem' }}>🌍 Fincas y Peones</div>
-              <div className="form-row" style={{ marginBottom: 12 }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Añadir finca</label>
-                  <select className="form-select" value="" onChange={e => { if (e.target.value) addFincaToForm(e.target.value) }}>
-                    <option value="">Seleccionar finca...</option>
-                    {fincas.filter(f => !form.fincas.some(ff => idEq(ff.id_finca, f.id_finca))).map(f => (
-                      <option key={f.id_finca} value={f.id_finca}>{f.nombre} ({f.termino_municipal})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            {/* SECCIONES */}
+            {form.secciones.map((sec, secIdx) => {
+              const secCostes = calcularCostesSeccion(sec)
+              return (
+                <div key={secIdx} style={{ background: 'var(--color-bg)', borderRadius: 16, padding: 16, marginBottom: 16, border: '2px solid var(--color-border)' }}>
+                  {/* Header de sección */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: 8, padding: '2px 10px', fontSize: 13, fontWeight: 600 }}>
+                        Sección {secIdx + 1}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <select className="form-select" value={sec.tipo_trabajo} onChange={e => updateSection(secIdx, 'tipo_trabajo', e.target.value)} style={{ minWidth: 160 }}>
+                          <option value="">Tipo de trabajo...</option>
+                          {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {form.secciones.length > 1 && (
+                      <button type="button" className="btn btn-small btn-danger" onClick={() => removeSection(secIdx)} aria-label={`Eliminar sección ${secIdx + 1}`}> Quitar</button>
+                    )}
+                  </div>
 
-              {form.fincas.map(fincaAsign => {
-                const finca = fincas.find(f => idEq(f.id_finca, fincaAsign.id_finca))
-                return (
-                  <div key={fincaAsign.id_finca} style={{ background: 'var(--color-bg)', borderRadius: 12, padding: 12, marginBottom: 12, border: '1px solid var(--color-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <strong style={{ color: 'var(--color-primary)' }}>📍 {finca?.nombre || 'Finca'}</strong>
-                      <button type="button" className="btn btn-small btn-danger" onClick={() => removeFincaFromForm(fincaAsign.id_finca)}>✕ Quitar</button>
+                  {/* FINCAS Y PEONES */}
+                  <div style={{ marginBottom: 12, paddingLeft: 8, borderLeft: '3px solid var(--color-primary)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-secondary)' }}> Fincas y Peones</div>
+                    <div className="form-row" style={{ marginBottom: 8 }}>
+                      <select className="form-select" value="" onChange={e => { if (e.target.value) addFincaToSection(secIdx, e.target.value) }}>
+                        <option value="">+ Seleccionar finca...</option>
+                        {fincas.filter(f => !sec.fincas.some(ff => idEq(ff.id_finca, f.id_finca))).map(f => (
+                          <option key={f.id_finca} value={f.id_finca}>{f.nombre} ({f.termino_municipal})</option>
+                        ))}
+                      </select>
                     </div>
 
-                    {fincaAsign.peones.map((peon, idx) => (
-                      <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                        <select className="form-select" style={{ flex: 2 }} value={peon.id_operario} onChange={e => updatePeonInFinca(fincaAsign.id_finca, idx, 'id_operario', e.target.value)}>
-                          <option value="">Seleccionar peón...</option>
-                          {personal.map(p => <option key={p.id_operario} value={p.id_operario}>{p.nombre} ({p.categoria} - {p.coste_h}€/h)</option>)}
-                        </select>
-                        <input type="number" className="form-input" style={{ flex: 1, maxWidth: 100 }} value={peon.horas} onChange={e => updatePeonInFinca(fincaAsign.id_finca, idx, 'horas', e.target.value)} step="0.5" min="0" placeholder="Horas" />
-                        <button type="button" className="btn btn-small btn-danger" onClick={() => removePeonFromFinca(fincaAsign.id_finca, idx)}>✕</button>
+                    {sec.fincas.map(fincaAsign => {
+                      const finca = fincas.find(f => idEq(f.id_finca, fincaAsign.id_finca))
+                      return (
+                        <div key={fincaAsign.id_finca} style={{ background: 'var(--color-card-bg)', borderRadius: 12, padding: 12, marginBottom: 8, border: '1px solid var(--color-border)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <strong style={{ color: 'var(--color-primary)', fontSize: 14 }}> {finca?.nombre || 'Finca'}</strong>
+                            <button type="button" className="btn btn-small btn-danger" onClick={() => removeFincaFromSection(secIdx, fincaAsign.id_finca)}></button>
+                          </div>
+
+                          {fincaAsign.peones.map((peon, pIdx) => (
+                            <div key={pIdx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                              <select className="form-select" style={{ flex: 2 }} value={peon.id_operario} onChange={e => updatePeonInFincaInSection(secIdx, fincaAsign.id_finca, pIdx, 'id_operario', e.target.value)}>
+                                <option value="">Peón...</option>
+                                {personal.map(p => <option key={p.id_operario} value={p.id_operario}>{p.nombre} ({p.coste_h}€/h)</option>)}
+                              </select>
+                              <input type="number" className="form-input" style={{ flex: 1, maxWidth: 90 }} value={peon.horas} onChange={e => updatePeonInFincaInSection(secIdx, fincaAsign.id_finca, pIdx, 'horas', e.target.value)} step="0.5" min="0" placeholder="Horas" />
+                              <button type="button" className="btn btn-small btn-danger" onClick={() => removePeonFromFincaInSection(secIdx, fincaAsign.id_finca, pIdx)}></button>
+                            </div>
+                          ))}
+
+                          <button type="button" className="btn btn-small btn-accent" onClick={() => addPeonToFincaInSection(secIdx, fincaAsign.id_finca)}>+ Peón</button>
+                        </div>
+                      )
+                    })}
+
+                    {sec.fincas.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Selecciona fincas arriba.</p>}
+                  </div>
+
+                  {/* MAQUINARIA */}
+                  <div style={{ marginBottom: 12, paddingLeft: 8, borderLeft: '3px solid var(--color-accent)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-secondary)' }}> Maquinaria</div>
+                    <div className="form-row" style={{ marginBottom: 8 }}>
+                      <select className="form-select" value="" onChange={e => { if (e.target.value) addMaquinaToSection(secIdx, e.target.value) }}>
+                        <option value="">+ Seleccionar máquina...</option>
+                        {maquinaria.filter(m => !sec.maquinaria.some(mm => idEq(mm.id_equipo, m.id_equipo))).map(m => (
+                          <option key={m.id_equipo} value={m.id_equipo}>{m.tipo} - {m.marca_modelo || 'Sin marca'} ({m.coste_h}€/h)</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {sec.maquinaria.map(maqAsign => {
+                      const equipo = maquinaria.find(m => idEq(m.id_equipo, maqAsign.id_equipo))
+                      return (
+                        <div key={maqAsign.id_equipo} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, background: 'var(--color-card-bg)', borderRadius: 12, padding: 10, border: '1px solid var(--color-border)' }}>
+                          <span style={{ flex: 2, fontWeight: 500, fontSize: 13 }}>
+                            {equipo ? `${equipo.tipo} (${equipo.marca_modelo || 'Sin marca'})` : 'Equipo'}
+                          </span>
+                          <input type="number" className="form-input" style={{ flex: 1, maxWidth: 90 }} value={maqAsign.horas} onChange={e => updateMaquinaHorasInSection(secIdx, maqAsign.id_equipo, e.target.value)} step="0.5" min="0" placeholder="Horas" />
+                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeMaquinaFromSection(secIdx, maqAsign.id_equipo)}></button>
+                        </div>
+                      )
+                    })}
+
+                    {sec.maquinaria.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Sin maquinaria.</p>}
+
+                    {sec.maquinaria.length > 0 && precioGasoilL > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                          <input type="checkbox" checked={sec.include_gasoil} onChange={e => updateSection(secIdx, 'include_gasoil', e.target.checked)} style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }} />
+                          <strong> Incluir gasoil</strong>
+                          <span style={{ color: 'var(--color-text-secondary)' }}>({precioGasoilL.toFixed(2)}€/L)</span>
+                        </label>
                       </div>
-                    ))}
-
-                    <button type="button" className="btn btn-small btn-accent" onClick={() => addPeonToFinca(fincaAsign.id_finca)}>+ Añadir peón</button>
+                    )}
                   </div>
-                )
-              })}
 
-              {form.fincas.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Selecciona fincas arriba para empezar.</p>}
-            </div>
-
-            {/* MAQUINARIA */}
-            <div style={{ marginBottom: 16 }}>
-              <div className="card-title" style={{ fontSize: '1rem' }}>🚜 Maquinaria</div>
-              <div className="form-row" style={{ marginBottom: 12 }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Añadir máquina</label>
-                  <select className="form-select" value="" onChange={e => { if (e.target.value) addMaquinaToForm(e.target.value) }}>
-                    <option value="">Seleccionar máquina...</option>
-                    {maquinaria.filter(m => !form.maquinaria.some(mm => idEq(mm.id_equipo, m.id_equipo))).map(m => (
-                      <option key={m.id_equipo} value={m.id_equipo}>{m.tipo} - {m.marca_modelo || 'Sin marca'} ({m.coste_h}€/h{m.consumo_l_h ? `, ${m.consumo_l_h}L/h` : ''})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {form.maquinaria.map(maqAsign => {
-                const equipo = maquinaria.find(m => idEq(m.id_equipo, maqAsign.id_equipo))
-                return (
-                  <div key={maqAsign.id_equipo} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, background: 'var(--color-bg)', borderRadius: 12, padding: 12, border: '1px solid var(--color-border)' }}>
-                    <span style={{ flex: 2, fontWeight: 500 }}>
-                      {equipo ? `${equipo.tipo} (${equipo.marca_modelo || 'Sin marca'})` : 'Equipo'}
-                      {equipo && <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}> - {equipo.coste_h}€/h</span>}
-                    </span>
-                    <input type="number" className="form-input" style={{ flex: 1, maxWidth: 100 }} value={maqAsign.horas} onChange={e => updateMaquinaHoras(maqAsign.id_equipo, e.target.value)} step="0.5" min="0" placeholder="Horas" />
-                    <button type="button" className="btn btn-small btn-danger" onClick={() => removeMaquinaFromForm(maqAsign.id_equipo)}>✕</button>
+                  {/* Coste de esta sección */}
+                  <div style={{ background: 'var(--color-card-bg)', borderRadius: 8, padding: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Subtotal sección:</span>
+                    <strong style={{ color: 'var(--color-primary)' }}>{secCostes.total.toFixed(2)} €</strong>
                   </div>
-                )
-              })}
-
-              {form.maquinaria.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No has añadido maquinaria.</p>}
-
-              {form.maquinaria.length > 0 && precioGasoilL > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.include_gasoil} onChange={e => setForm({ ...form, include_gasoil: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--color-primary)' }} />
-                    <strong>⛽ Incluir gasoil automáticamente</strong>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>({precioGasoilL.toFixed(2)}€/L)</span>
-                  </label>
                 </div>
-              )}
-            </div>
+              )
+            })}
 
-            {/* DESGLOSE */}
+            {/* Botón añadir sección */}
+            <button type="button" className="btn btn-accent btn-full" onClick={addSection} style={{ marginBottom: 16, borderStyle: 'dashed', borderWidth: 2 }}>
+              + Añadir otra sección de trabajo
+            </button>
+
+            {/* DESGLOSE TOTAL */}
             <div style={{ background: 'var(--color-bg)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid var(--color-border)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>💰 Desglose de costes</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span>👷 Peones ({costes.totalHorasPeones}h):</span><strong>{costes.costePeones.toFixed(2)} €</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span>🚜 Maquinaria ({costes.totalHorasMaq}h):</span><strong>{costes.costeMaquinaria.toFixed(2)} €</strong></div>
-              {costes.costeGasoil > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span>⛽ Gasoil:</span><strong>{costes.costeGasoil.toFixed(2)} €</strong></div>}
+              <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}> Total de la jornada</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span> Peones ({costes.totalHorasPeones}h):</span><strong>{costes.costePeones.toFixed(2)} €</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span> Maquinaria ({costes.totalHorasMaq}h):</span><strong>{costes.costeMaquinaria.toFixed(2)} €</strong></div>
+              {costes.costeGasoil > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}><span> Gasoil:</span><strong>{costes.costeGasoil.toFixed(2)} €</strong></div>}
               <div style={{ borderTop: '2px solid var(--color-primary)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 700, fontSize: 16 }}>TOTAL:</span>
                 <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--color-primary)' }}>{costes.total.toFixed(2)} €</span>
@@ -513,39 +643,44 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
             </div>
 
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar labor'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar labor'}
             </button>
           </form>
         </div>
       )}
 
-      {/* TABLA */}
+      {/* TABLA DE LABORES */}
       <div className="card">
-        <div className="card-title">📋 Labores registradas ({filteredLabores.length})</div>
+        <div className="card-title"> Labores registradas ({filteredLabores.length})</div>
         {filteredLabores.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
-              <thead><tr><th>Fecha</th><th>Tipo</th><th>Fincas</th><th>Peones</th><th>Maquinaria</th><th>Coste Total</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Tipos</th><th>Fincas</th><th>Coste Total</th><th>Acciones</th></tr></thead>
               <tbody>
-                {filteredLabores.map(l => (
-                  <tr key={l.id_labor}>
-                    <td>{l.fecha ? format(new Date(l.fecha), 'dd/MM/yyyy') : '-'}</td>
-                    <td>{l.tipo_trabajo || '-'}</td>
-                    <td>{getFincaInfo(l)}</td>
-                    <td style={{ fontSize: 13 }}>{getPeonesInfo(l)}</td>
-                    <td style={{ fontSize: 13 }}>{getMaqInfo(l)}</td>
-                    <td><strong>{(l.coste_total || 0).toFixed(2)} €</strong></td>
-                    <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(l)} aria-label={`Editar labor ${l.tipo_trabajo || 'sin tipo'}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(l.id_labor)} aria-label={`Eliminar labor ${l.tipo_trabajo || 'sin tipo'}`}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredLabores.map(l => {
+                  const secciones = getSeccionesInfo(l)
+                  return (
+                    <tr key={l.id_labor}>
+                      <td>{l.fecha ? format(new Date(l.fecha), 'dd/MM/yyyy') : '-'}</td>
+                      <td>
+                        {secciones.map((s, i) => (
+                          <div key={i} style={{ fontSize: 13 }}>{s.tipo_trabajo || '-'}</div>
+                        ))}
+                      </td>
+                      <td style={{ fontSize: 13 }}>{getFincaInfo(l)}</td>
+                      <td><strong>{(l.coste_total || 0).toFixed(2)} €</strong></td>
+                      <td>
+                        <button className="btn btn-small btn-accent" onClick={() => handleEdit(l)} aria-label={`Editar labor`}></button>
+                        <button className="btn btn-small btn-danger" onClick={() => handleDelete(l.id_labor)} aria-label={`Eliminar labor`}></button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         ) : (
-          <div className="empty-state"><div className="empty-state-icon">📝</div><div className="empty-state-text">No hay labores para este filtro</div></div>
+          <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">No hay labores para este filtro</div></div>
         )}
       </div>
     </div>

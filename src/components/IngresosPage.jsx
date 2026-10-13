@@ -158,11 +158,11 @@ function IngresosPage({ fincas, params, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
@@ -180,7 +180,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
       {/* Barra de búsqueda y exportar */}
       <div className="fincas-toolbar mb-16" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -190,7 +190,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
             aria-label="Buscar ingresos"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-small btn-accent" onClick={() => {
@@ -204,7 +204,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
           }))
           downloadCSV('ingresos_agrotrack', headers, rows)
         }} aria-label="Exportar ingresos como CSV">
-          📥 Exportar CSV
+           Exportar CSV
         </button>
       </div>
 
@@ -219,13 +219,13 @@ function IngresosPage({ fincas, params, onDataChange }) {
           ))}
         </select>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nuevo Ingreso'}
+          {showForm ? ' Cancelar' : '+ Nuevo Ingreso'}
         </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <div className="card-title">💵 {editingId ? 'Editar Ingreso' : 'Nuevo Ingreso'}</div>
+          <div className="card-title"> {editingId ? 'Editar Ingreso' : 'Nuevo Ingreso'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -235,10 +235,10 @@ function IngresosPage({ fincas, params, onDataChange }) {
               <div className="form-group">
                 <label className="form-label">Origen *</label>
                 <select name="origen" className="form-select" value={form.origen} onChange={handleChange} required>
-                  <option value="Cosecha">🍇 Cosecha</option>
-                  <option value="Ayuda">🏛️ Ayuda / Subvención</option>
-                  <option value="Venta">📦 Venta</option>
-                  <option value="Otro">📋 Otro</option>
+                  <option value="Cosecha"> Cosecha</option>
+                  <option value="Ayuda"> Ayuda / Subvención</option>
+                  <option value="Venta"> Venta</option>
+                  <option value="Otro"> Otro</option>
                 </select>
               </div>
             </div>
@@ -282,14 +282,14 @@ function IngresosPage({ fincas, params, onDataChange }) {
             </div>
 
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar ingreso'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar ingreso'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Ingresos registrados ({filteredIngresos.length})</div>
+        <div className="card-title"> Ingresos registrados ({filteredIngresos.length})</div>
         {filteredIngresos.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -309,15 +309,15 @@ function IngresosPage({ fincas, params, onDataChange }) {
                     <td>{i.fecha ? format(new Date(i.fecha), 'dd/MM/yyyy') : '-'}</td>
                     <td>
                       <span className={`badge badge-${i.origen === 'Ayuda' ? 'blue' : i.origen === 'Cosecha' ? 'green' : 'yellow'}`}>
-                        {i.origen === 'Cosecha' ? '🍇' : i.origen === 'Ayuda' ? '🏛️' : i.origen === 'Venta' ? '📦' : '📋'} {i.origen || '-'}
+                        {i.origen === 'Cosecha' ? '' : i.origen === 'Ayuda' ? '' : i.origen === 'Venta' ? '' : ''} {i.origen || '-'}
                       </span>
                     </td>
                     <td>{i.concepto || '-'}</td>
                     <td>{i.origen === 'Cosecha' && i.id_cosecha ? getCosechaInfo(i.id_cosecha) : '-'}</td>
                     <td><strong style={{ color: 'var(--color-success)' }}>{i.cantidad ? `${i.cantidad.toFixed(2)} €` : '-'}</strong></td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(i)} aria-label={`Editar ingreso ${i.concepto || i.origen}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(i.id_ingreso)} aria-label={`Eliminar ingreso ${i.concepto || i.origen}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(i)} aria-label={`Editar ingreso ${i.concepto || i.origen}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(i.id_ingreso)} aria-label={`Eliminar ingreso ${i.concepto || i.origen}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -326,7 +326,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">💵</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">No hay ingresos registrados</div>
           </div>
         )}

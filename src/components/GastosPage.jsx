@@ -145,11 +145,11 @@ function GastosPage({ fincas, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar carga">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar carga"> Reintentar</button>
         </div>
       )}
 
@@ -167,7 +167,7 @@ function GastosPage({ fincas, onDataChange }) {
       {/* Barra de búsqueda y exportar */}
       <div className="fincas-toolbar mb-16" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -177,7 +177,7 @@ function GastosPage({ fincas, onDataChange }) {
             aria-label="Buscar gastos"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-small btn-accent" onClick={() => {
@@ -192,7 +192,7 @@ function GastosPage({ fincas, onDataChange }) {
           }))
           downloadCSV('gastos_agrotrack', headers, rows)
         }} aria-label="Exportar a CSV">
-          📥 Exportar CSV
+           Exportar CSV
         </button>
       </div>
 
@@ -207,13 +207,13 @@ function GastosPage({ fincas, onDataChange }) {
           ))}
         </select>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nuevo Gasto'}
+          {showForm ? ' Cancelar' : '+ Nuevo Gasto'}
         </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <div className="card-title">💰 {editingId ? 'Editar Gasto' : 'Nuevo Gasto'}</div>
+          <div className="card-title"> {editingId ? 'Editar Gasto' : 'Nuevo Gasto'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -265,14 +265,14 @@ function GastosPage({ fincas, onDataChange }) {
               <textarea name="observaciones" className="form-textarea" value={form.observaciones} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar gasto'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar gasto'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Gastos registrados ({filteredGastos.length})</div>
+        <div className="card-title"> Gastos registrados ({filteredGastos.length})</div>
         {filteredGastos.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -295,8 +295,8 @@ function GastosPage({ fincas, onDataChange }) {
                     <td><strong>{g.importe ? `${g.importe.toFixed(2)} €` : '-'}</strong></td>
                     <td>{g.forma_pago || '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(g)} aria-label={`Editar gasto ${g.concepto}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(g.id_gasto)} aria-label={`Eliminar gasto ${g.concepto}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(g)} aria-label={`Editar gasto ${g.concepto}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(g.id_gasto)} aria-label={`Eliminar gasto ${g.concepto}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -305,7 +305,7 @@ function GastosPage({ fincas, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">💰</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">No hay gastos registrados</div>
           </div>
         )}

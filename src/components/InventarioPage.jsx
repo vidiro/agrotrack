@@ -147,18 +147,18 @@ function InventarioPage({ onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadInventario} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadInventario} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -168,17 +168,17 @@ function InventarioPage({ onDataChange }) {
             aria-label="Buscar artículos de inventario"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nuevo Artículo'}
+          {showForm ? ' Cancelar' : '+ Nuevo Artículo'}
         </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <div className="card-title">📦 {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}</div>
+          <div className="card-title"> {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -241,14 +241,14 @@ function InventarioPage({ onDataChange }) {
               <textarea name="notas" className="form-textarea" value={form.notas} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar artículo'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar artículo'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Inventario ({filteredArticulos.length})</div>
+        <div className="card-title"> Inventario ({filteredArticulos.length})</div>
         {filteredArticulos.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -273,8 +273,8 @@ function InventarioPage({ onDataChange }) {
                     </td>
                     <td>{a.precio_unitario ? `${a.precio_unitario.toFixed(2)} €` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar artículo ${a.nombre_articulo}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_articulo)} aria-label={`Eliminar artículo ${a.nombre_articulo}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar artículo ${a.nombre_articulo}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_articulo)} aria-label={`Eliminar artículo ${a.nombre_articulo}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -283,7 +283,7 @@ function InventarioPage({ onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">📦</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontraron artículos con esa búsqueda' : 'No hay artículos en inventario'}
             </div>

@@ -149,18 +149,18 @@ function AplicacionesPage({ fincas, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -170,20 +170,20 @@ function AplicacionesPage({ fincas, onDataChange }) {
             aria-label="Buscar aplicaciones"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button
           className="btn btn-primary"
           onClick={() => { setShowForm(!showForm); setEditingId(null) }}
         >
-          {showForm ? '✕ Cancelar' : '+ Nueva Aplicación'}
+          {showForm ? ' Cancelar' : '+ Nueva Aplicación'}
         </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <div className="card-title">🧪 Nueva Aplicación Fitosanitaria</div>
+          <div className="card-title"> Nueva Aplicación Fitosanitaria</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -229,14 +229,14 @@ function AplicacionesPage({ fincas, onDataChange }) {
               <textarea name="observaciones" className="form-textarea" value={form.observaciones} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar aplicación'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar aplicación'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Aplicaciones registradas ({filteredAplicaciones.length})</div>
+        <div className="card-title"> Aplicaciones registradas ({filteredAplicaciones.length})</div>
         {filteredAplicaciones.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -263,8 +263,8 @@ function AplicacionesPage({ fincas, onDataChange }) {
                     </td>
                     <td>{laborInfo(a.id_labor)}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar aplicación ${a.producto}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_aplicacion)} aria-label={`Eliminar aplicación ${a.producto}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar aplicación ${a.producto}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_aplicacion)} aria-label={`Eliminar aplicación ${a.producto}`}></button>
                     </td>
                   </tr>
                 ))}
@@ -273,7 +273,7 @@ function AplicacionesPage({ fincas, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🧪</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">No hay aplicaciones registradas</div>
           </div>
         )}

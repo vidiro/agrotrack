@@ -1,4 +1,5 @@
 import { PRIMARY_NAV, MORE_NAV } from '../data/nav'
+import { getIcon } from '../utils/lucideIcons'
 
 function BottomNav({ currentPage, setCurrentPage, moreOpen, setMoreOpen }) {
   const moreActive = MORE_NAV.some(item => item.id === currentPage)
@@ -18,7 +19,7 @@ function BottomNav({ currentPage, setCurrentPage, moreOpen, setMoreOpen }) {
             aria-label={item.label}
             aria-current={currentPage === item.id ? 'page' : undefined}
           >
-            <span className="bottom-nav-icon" aria-hidden="true">{item.icon}</span>
+            <span className="bottom-nav-icon" aria-hidden="true">{getIcon(item.icon, { size: 20, strokeWidth: 2 })}</span>
             <span>{item.label}</span>
           </button>
         ))}
@@ -29,7 +30,7 @@ function BottomNav({ currentPage, setCurrentPage, moreOpen, setMoreOpen }) {
           aria-label="Más secciones"
           aria-expanded={moreOpen}
         >
-          <span className="bottom-nav-icon" aria-hidden="true">☰</span>
+          <span className="bottom-nav-icon" aria-hidden="true">{getIcon('MoreHorizontal', { size: 20, strokeWidth: 2 })}</span>
           <span>Más</span>
         </button>
       </div>

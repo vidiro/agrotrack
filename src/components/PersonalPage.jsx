@@ -133,11 +133,11 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadPersonal} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadPersonal} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
@@ -151,7 +151,7 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -161,11 +161,11 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
             aria-label="Buscar operarios"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nuevo Operario'}
+          {showForm ? ' Cancelar' : '+ Nuevo Operario'}
         </button>
       </div>
 
@@ -210,14 +210,14 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
               <textarea name="notas" className="form-textarea" value={form.notas} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar operario'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar operario'}
             </button>
           </form>
         </div>
       )}
 
       <div className="card">
-        <div className="card-title">📋 Operarios registrados ({filteredPersonal.length})</div>
+        <div className="card-title"> Operarios registrados ({filteredPersonal.length})</div>
         {filteredPersonal.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
@@ -236,8 +236,8 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
                     <td><span className="badge badge-blue">{p.categoria || 'Peón'}</span></td>
                     <td>{p.coste_h ? `${p.coste_h.toFixed(2)} €` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(p)} aria-label={`Editar operario ${p.nombre}`}>✏️</button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(p.id_operario)} aria-label={`Eliminar operario ${p.nombre}`}>🗑️</button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(p)} aria-label={`Editar operario ${p.nombre}`}></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(p.id_operario)} aria-label={`Eliminar operario ${p.nombre}`}></button>
                     </td>
                   </tr>
                 ))}

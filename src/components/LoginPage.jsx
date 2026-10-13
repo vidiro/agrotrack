@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../data/supabaseClient'
+import { getIcon } from '../utils/lucideIcons'
 
 function LoginPage({ darkMode, toggleDarkMode }) {
   const [email, setEmail] = useState('')
@@ -44,11 +45,11 @@ function LoginPage({ darkMode, toggleDarkMode }) {
         onClick={toggleDarkMode}
         aria-label={darkMode ? 'Modo claro' : 'Modo oscuro'}
       >
-        {darkMode ? '☀️' : '🌙'}
+        {getIcon(darkMode ? 'Sun' : 'Moon', { size: 20, strokeWidth: 2 })}
       </button>
       <div className="login-card">
         <div className="login-brand">
-          <span className="login-logo" aria-hidden="true">🚜</span>
+          <span className="login-logo" aria-hidden="true">{getIcon('Tractor', { size: 48, strokeWidth: 1.5 })}</span>
           <h1>AGROtrack</h1>
           <p>Gestión de la explotación. Acceso restringido.</p>
         </div>
@@ -95,17 +96,21 @@ function LoginPage({ darkMode, toggleDarkMode }) {
               onClick={() => setShowPassword(v => !v)}
               aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             >
-              {showPassword ? '🙈' : '👁️'}
+              {getIcon(showPassword ? 'EyeOff' : 'Eye', { size: 20, strokeWidth: 2 })}
             </button>
           </div>
 
-          <button type="submit" className={`btn btn-primary btn-full ${loading ? 'btn-loading' : ''}`} disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
+          <button
+            type="submit"
+            className="btn btn-primary btn-full"
+            disabled={loading || !isSupabaseConfigured}
+          >
+            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
           </button>
         </form>
 
         <p className="login-hint">
-          Los usuarios se crean en Supabase (Authentication → Users). No hay registro público.
+          Crea usuarios en Supabase → Authentication → Users. No hay registro público.
         </p>
       </div>
     </div>

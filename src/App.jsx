@@ -18,6 +18,9 @@ import PersonalPage from './components/PersonalPage'
 import MaquinariaPage from './components/MaquinariaPage'
 import InventarioPage from './components/InventarioPage'
 import ConfiguracionPage from './components/ConfiguracionPage'
+import DestinosPage from './components/DestinosPage'
+import InformesPage from './components/InformesPage'
+import AmortizacionesPage from './components/AmortizacionesPage'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -29,6 +32,9 @@ function App() {
   const [personal, setPersonal] = useState([])
   const [maquinaria, setMaquinaria] = useState([])
   const [params, setParams] = useState([])
+  const [destinos, setDestinos] = useState([])
+  const [preciosDestino, setPreciosDestino] = useState([])
+  const [amortizaciones, setAmortizaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [darkMode, setDarkMode] = useState(() => {
@@ -67,22 +73,33 @@ function App() {
       setLoading(true)
       setError(null)
 
-      const [fincasRes, personalRes, maquinariaRes, paramsRes] = await Promise.all([
+      const [fincasRes, personalRes, maquinariaRes, paramsRes, destinosRes, preciosRes, amortRes] = await Promise.all([
         supabase.from('fincas').select('*').order('nombre'),
         supabase.from('personal').select('*').order('nombre'),
         supabase.from('maquinaria').select('*').order('id_equipo'),
-        supabase.from('params').select('*')
+        supabase.from('params').select('*'),
+        supabase.from('destinos').select('*').order('nombre'),
+        supabase.from('precios_destino').select('*'),
+        supabase.from('amortizaciones').select('*')
       ])
 
       if (fincasRes.error) throw new Error(fincasRes.error.message)
       if (personalRes.error) throw new Error(personalRes.error.message)
       if (maquinariaRes.error) throw new Error(maquinariaRes.error.message)
       if (paramsRes.error) throw new Error(paramsRes.error.message)
+      // Tolerar si las tablas de destinos no existen aún
+      if (destinosRes.error && !destinosRes.message?.includes('Could not find the table')) throw new Error(destinosRes.error.message)
+      if (preciosRes.error && !preciosRes.message?.includes('Could not find the table')) throw new Error(preciosRes.error.message)
+      // Tolerar si la tabla de amortizaciones no existe aún
+      if (amortRes.error && !amortRes.message?.includes('Could not find the table')) throw new Error(amortRes.error.message)
 
       setFincas(fincasRes.data || [])
       setPersonal(personalRes.data || [])
       setMaquinaria(maquinariaRes.data || [])
       setParams(paramsRes.data || [])
+      setDestinos(destinosRes.data || [])
+      setPreciosDestino(preciosRes.data || [])
+      setAmortizaciones(amortRes.data || [])
     } catch (err) {
       console.error('Error cargando datos:', err)
       setError('No se pudieron cargar los datos. Comprueba la conexión y que hayas ejecutado la migración SQL v1.3.')
@@ -124,6 +141,9 @@ function App() {
       personal,
       maquinaria,
       params,
+      destinos,
+      preciosDestino,
+      amortizaciones,
       onDataChange,
       darkMode,
       toggleDarkMode,
@@ -161,8 +181,14 @@ function App() {
         return <MaquinariaPage {...pageProps} />
       case 'inventario':
         return <InventarioPage {...pageProps} />
+      case 'destinos':
+        return <DestinosPage {...pageProps} />
       case 'configuracion':
         return <ConfiguracionPage {...pageProps} />
+      case 'informes':
+        return <InformesPage {...pageProps} />
+      case 'amortizaciones':
+        return <AmortizacionesPage {...pageProps} />
       default:
         return <Dashboard {...pageProps} />
     }

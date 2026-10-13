@@ -109,7 +109,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
 
       {!selectedFinca ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🌍</div>
+          <div className="empty-state-icon"></div>
           <div className="empty-state-text">Selecciona una finca para ver su detalle</div>
         </div>
       ) : loading ? (
@@ -119,13 +119,13 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
         </div>
       ) : (
         <div>
-          {error && <div className="alert alert-error">⚠️ {error}</div>}
+          {error && <div className="alert alert-error"> {error}</div>}
 
           {/* Cabecera con nombre de finca */}
           <div className="card mb-16" style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem' }}>🌍 {fincaSeleccionada?.nombre}</h2>
+                <h2 style={{ margin: 0, fontSize: '1.2rem' }}> {fincaSeleccionada?.nombre}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
                   {fincaSeleccionada?.cultivo} {fincaSeleccionada?.variedad && `· ${fincaSeleccionada.variedad}`} {fincaSeleccionada?.superficie_total_ha && `· ${fincaSeleccionada.superficie_total_ha} ha`} {fincaSeleccionada?.termino_municipal && `· ${fincaSeleccionada.termino_municipal}`}
                 </div>
@@ -182,7 +182,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
 
           {/* Sección: Labores */}
           <div className="card">
-            <div className="card-title">📝 Labores ({stats.numLabores})</div>
+            <div className="card-title"> Labores ({stats.numLabores})</div>
             {labores.length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
@@ -202,13 +202,13 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon">📝</div><div className="empty-state-text">Sin labores</div></div>
+              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin labores</div></div>
             )}
           </div>
 
           {/* Sección: Aplicaciones fitosanitarias */}
           <div className="card">
-            <div className="card-title">🧪 Aplicaciones Fitosanitarias ({stats.numAplicaciones})</div>
+            <div className="card-title"> Aplicaciones Fitosanitarias ({stats.numAplicaciones})</div>
             {aplicaciones.length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
@@ -228,13 +228,13 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon">🧪</div><div className="empty-state-text">Sin aplicaciones registradas</div></div>
+              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin aplicaciones registradas</div></div>
             )}
           </div>
 
           {/* Sección: Cosechas */}
           <div className="card">
-            <div className="card-title">🍇 Cosechas ({stats.numCosechas})</div>
+            <div className="card-title"> Cosechas ({stats.numCosechas})</div>
             {cosechas.length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
@@ -257,13 +257,13 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon">🍇</div><div className="empty-state-text">Sin cosechas</div></div>
+              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin cosechas</div></div>
             )}
           </div>
 
           {/* Sección: Gastos asociados */}
           <div className="card">
-            <div className="card-title">💰 Gastos asociados ({gastos.length})</div>
+            <div className="card-title"> Gastos asociados ({gastos.length})</div>
             {gastos.length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
@@ -283,7 +283,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon">💰</div><div className="empty-state-text">Sin gastos asociados a esta finca</div></div>
+              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin gastos asociados a esta finca</div></div>
             )}
           </div>
         </div>

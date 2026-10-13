@@ -61,11 +61,11 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadParams} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadParams} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
@@ -80,67 +80,201 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
       </div>
 
       <div className="card">
-        <div className="card-title">⚙️ Parámetros de configuración</div>
+        <div className="card-title"> Parámetros de configuración</div>
         <p className="text-muted text-sm mb-16">
           Estos son los valores que se utilizan en los cálculos de la aplicación. Puedes modificarlos según necesites.
         </p>
         
-        {params.length > 0 ? (
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Parámetro</th>
-                  <th>Valor actual</th>
-                  <th>Nuevo valor</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {params.map(p => (
-                  <tr key={p.clave}>
-                    <td><strong>{p.clave.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</strong></td>
-                    <td><code>{p.valor}</code></td>
-                    <td>
-                      {editingParam === p.clave ? (
-                        <input
-                          type="number"
-                          className="form-input"
-                          style={{ width: '120px' }}
-                          value={newParamValue}
-                          onChange={e => setNewParamValue(e.target.value)}
-                          step="0.01"
-                          min="0"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {editingParam === p.clave ? (
-                        <button className={`btn btn-small btn-primary ${saving ? 'btn-loading' : ''}`} onClick={() => handleUpdateParam(p)} disabled={saving}>
-                          {saving ? 'Guardando...' : '💾 Guardar'}
-                        </button>
-                      ) : (
-                        <button className="btn btn-small btn-accent" onClick={() => { setEditingParam(p.clave); setNewParamValue(p.valor.toString()) }} aria-label={`Editar parámetro ${p.clave}`}>✏️ Editar</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">⚙️</div>
-            <div className="empty-state-text">No hay parámetros configurados</div>
-          </div>
-        )}
+        {/* Helper para etiqueta legible */}
+        {(() => {
+          const etiquetas = {
+            'precio_gasoil_l': ' Precio gasoil (€/L)',
+            'precio_uva_kilogrado': ' Precio uva (€/kilogrado)',
+            'precio_manzanilla_kg': '🫒 Precio Manzanilla (€/kg)',
+            'precio_carrasquena_kg': '🫒 Precio Carrasqueña (€/kg)',
+            'precio_basta_kg': '🫒 Precio aceituna basta (€/kg)',
+            'precio_perdigon_kg': '🫒 Precio pérdigon (€/kg)',
+            'campana_mes_inicio': ' Mes inicio campaña',
+            'campana_dia_inicio': ' Día inicio campaña'
+          }
+          // Excluir params de campaña de la tabla de precios (se configuran abajo)
+          const precioParams = params.filter(p => p.clave.startsWith('precio_'))
+          const otrosParams = params.filter(p => !p.clave.startsWith('precio_') && !p.clave.startsWith('campana_'))
+
+          return (
+            <>
+              {otrosParams.length > 0 && (
+                <div className="table-container" style={{ marginBottom: 8 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Parámetro</th>
+                        <th>Valor actual</th>
+                        <th>Nuevo valor</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {otrosParams.map(p => (
+                        <tr key={p.clave}>
+                          <td><strong>{p.clave.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</strong></td>
+                          <td><code>{p.valor}</code></td>
+                          <td>
+                            {editingParam === p.clave ? (
+                              <input type="number" className="form-input" style={{ width: '120px' }} value={newParamValue} onChange={e => setNewParamValue(e.target.value)} step="0.01" min="0" autoFocus />
+                            ) : (<span className="text-muted">—</span>)}
+                          </td>
+                          <td>
+                            {editingParam === p.clave ? (
+                              <button className={`btn btn-small btn-primary ${saving ? 'btn-loading' : ''}`} onClick={() => handleUpdateParam(p)} disabled={saving}>{saving ? 'Guardando...' : ' Guardar'}</button>
+                            ) : (
+                              <button className="btn btn-small btn-accent" onClick={() => { setEditingParam(p.clave); setNewParamValue(p.valor.toString()) }} aria-label={`Editar parámetro ${p.clave}`}> Editar</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {precioParams.length > 0 && (
+                <>
+                  <div className="card" style={{ borderLeft: '4px solid var(--color-success)', marginBottom: 16 }}>
+                    <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                       Precios de cosecha
+                    </div>
+                    <p className="text-muted text-sm mb-16">Precios por kg que se usarán para calcular el ingreso previsto de la cosecha. Actualízalos cada campaña.</p>
+                    <div className="table-container">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Producto</th>
+                            <th>Precio actual</th>
+                            <th>Nuevo precio</th>
+                            <th>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {precioParams.map(p => (
+                            <tr key={p.clave}>
+                              <td><strong>{etiquetas[p.clave] || p.clave.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</strong></td>
+                              <td><code>{parseFloat(p.valor).toFixed(2)} €</code></td>
+                              <td>
+                                {editingParam === p.clave ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <input type="number" className="form-input" style={{ width: '100px' }} value={newParamValue} onChange={e => setNewParamValue(e.target.value)} step="0.01" min="0" autoFocus />
+                                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>€/kg</span>
+                                  </div>
+                                ) : (<span className="text-muted">—</span>)}
+                              </td>
+                              <td>
+                                {editingParam === p.clave ? (
+                                  <button className={`btn btn-small btn-primary ${saving ? 'btn-loading' : ''}`} onClick={() => handleUpdateParam(p)} disabled={saving}>{saving ? 'Guardando...' : ' Guardar'}</button>
+                                ) : (
+                                  <button className="btn btn-small btn-accent" onClick={() => { setEditingParam(p.clave); setNewParamValue(p.valor.toString()) }} aria-label={`Editar ${etiquetas[p.clave] || p.clave}`}> Editar</button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Configuración de campaña */}
+              <div className="card" style={{ borderLeft: '4px solid var(--color-primary)', marginBottom: 16 }}>
+                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                   Período de Campaña
+                </div>
+                <p className="text-muted text-sm mb-16">Define cuándo empieza y termina la campaña agrícola. La campaña del año X va desde esta fecha del año anterior hasta esta fecha del año X.</p>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Mes de inicio de campaña</label>
+                    <select className="form-select" value={(() => {
+                      const val = params.find(p => p.clave === 'campana_mes_inicio')
+                      return val ? parseInt(val.valor) : 9
+                    })()} onChange={async (e) => {
+                      const newVal = e.target.value
+                      const existing = params.find(p => p.clave === 'campana_mes_inicio')
+                      setSaving(true)
+                      try {
+                        if (existing) {
+                          const { error: err } = await supabase.from('params').update({ valor: parseFloat(newVal) }).eq('clave', 'campana_mes_inicio')
+                          if (err) throw new Error(err.message)
+                        } else {
+                          const { error: err } = await supabase.from('params').insert([{ clave: 'campana_mes_inicio', valor: parseFloat(newVal) }])
+                          if (err) throw new Error(err.message)
+                        }
+                        setSuccess('Mes de campaña actualizado')
+                        await loadParams()
+                        onDataChange?.()
+                        setTimeout(() => setSuccess(''), 3000)
+                      } catch (err) {
+                        setError(err.message)
+                      } finally {
+                        setSaving(false)
+                      }
+                    }}>
+                      <option value={1}>Enero</option><option value={2}>Febrero</option>
+                      <option value={3}>Marzo</option><option value={4}>Abril</option>
+                      <option value={5}>Mayo</option><option value={6}>Junio</option>
+                      <option value={7}>Julio</option><option value={8}>Agosto</option>
+                      <option value={9}>Septiembre</option><option value={10}>Octubre</option>
+                      <option value={11}>Noviembre</option><option value={12}>Diciembre</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Día de inicio</label>
+                    <select className="form-select" value={(() => {
+                      const val = params.find(p => p.clave === 'campana_dia_inicio')
+                      return val ? parseInt(val.valor) : 15
+                    })()} onChange={async (e) => {
+                      const newVal = e.target.value
+                      const existing = params.find(p => p.clave === 'campana_dia_inicio')
+                      setSaving(true)
+                      try {
+                        if (existing) {
+                          const { error: err } = await supabase.from('params').update({ valor: parseFloat(newVal) }).eq('clave', 'campana_dia_inicio')
+                          if (err) throw new Error(err.message)
+                        } else {
+                          const { error: err } = await supabase.from('params').insert([{ clave: 'campana_dia_inicio', valor: parseFloat(newVal) }])
+                          if (err) throw new Error(err.message)
+                        }
+                        setSuccess('Día de campaña actualizado')
+                        await loadParams()
+                        onDataChange?.()
+                        setTimeout(() => setSuccess(''), 3000)
+                      } catch (err) {
+                        setError(err.message)
+                      } finally {
+                        setSaving(false)
+                      }
+                    }}>
+                      {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                   Ejemplo: 15 sept → La campaña 2025 va del 15 sept 2024 al 15 sept 2025
+                </div>
+              </div>
+
+              {params.length === 0 && (
+                <div className="empty-state">
+                  <div className="empty-state-icon"></div>
+                  <div className="empty-state-text">No hay parámetros configurados</div>
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       <div className="card mt-24">
-        <div className="card-title">ℹ️ Información de la aplicación</div>
+        <div className="card-title"> Información de la aplicación</div>
         <div className="table-container">
           <table className="data-table">
             <tbody>
@@ -156,7 +290,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
       </div>
 
       <div className="card mt-24">
-        <div className="card-title">🔐 Seguridad</div>
+        <div className="card-title"> Seguridad</div>
         <div className="alert alert-info">
           <strong>Acceso:</strong> la app exige inicio de sesión. Crea usuarios en Supabase → Authentication → Users (no hay registro público).
           Ejecuta <code>docs/SQL_migracion_v1.3.sql</code> para bloquear lecturas anónimas.
@@ -165,7 +299,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
       </div>
 
       <div className="card mt-24">
-        <div className="card-title">📱 Cómo usar la app en tu iPhone</div>
+        <div className="card-title"> Cómo usar la app en tu iPhone</div>
         <ol style={{ paddingLeft: 20, lineHeight: 2 }}>
           <li>Abre la app en Safari (no Chrome ni Firefox)</li>
           <li>Toca el botón <strong>Compartir</strong> (cuadrado con flecha ↑)</li>

@@ -194,11 +194,11 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
 
   return (
     <div>
-      {success && <div className="alert alert-success" role="alert">✅ {success}</div>}
+      {success && <div className="alert alert-success" role="alert"> {success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadFincas} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadFincas} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
 
@@ -225,7 +225,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
       {/* Barra de búsqueda y filtros */}
       <div className="fincas-toolbar">
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             type="text"
             className="search-input"
@@ -235,7 +235,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
             aria-label="Buscar fincas"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda">✕</button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
           )}
         </div>
         <div className="sort-buttons">
@@ -246,20 +246,20 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               onClick={() => toggleSort(field)}
               aria-label={`Ordenar por ${field}`}
             >
-              {field === 'nombre' ? '📋 Nombre' : field === 'superficie' ? '📏 Superficie' : field === 'cultivo' ? '🌱 Cultivo' : '📅 Año'}
+              {field === 'nombre' ? ' Nombre' : field === 'superficie' ? '📏 Superficie' : field === 'cultivo' ? '🌱 Cultivo' : '📅 Año'}
               {sortBy === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
-          {showForm ? '✕ Cancelar' : '+ Nueva Finca'}
+          {showForm ? ' Cancelar' : '+ Nueva Finca'}
         </button>
       </div>
 
       {/* Formulario de nueva/editar finca */}
       {showForm && (
         <div className="card">
-          <div className="card-title">🌍 {editingId ? 'Editar Finca' : 'Nueva Finca'}</div>
+          <div className="card-title"> {editingId ? 'Editar Finca' : 'Nueva Finca'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -318,7 +318,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               <textarea name="notas" className="form-textarea" value={form.notas} onChange={handleChange} />
             </div>
             <button type="submit" className={`btn btn-primary btn-full ${saving ? 'btn-loading' : ''}`} disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : '✅ Registrar finca'}
+              {saving ? 'Guardando...' : editingId ? ' Guardar cambios' : ' Registrar finca'}
             </button>
           </form>
         </div>
@@ -337,24 +337,24 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               </div>
               <h3 className="finca-card-name">{f.nombre}</h3>
               <div className="finca-card-info">
-                {f.termino_municipal && <div className="info-row">📍 {f.termino_municipal}</div>}
+                {f.termino_municipal && <div className="info-row"> {f.termino_municipal}</div>}
                 {f.superficie_total_ha && <div className="info-row">📏 {f.superficie_total_ha} ha</div>}
-                {f.tipo_suelo && <div className="info-row">🌾 {f.tipo_suelo}</div>}
-                {f.variedad && <div className="info-row">🍇 {f.variedad}</div>}
+                {f.tipo_suelo && <div className="info-row"> {f.tipo_suelo}</div>}
+                {f.variedad && <div className="info-row"> {f.variedad}</div>}
                 {f.ano_plantacion && <div className="info-row">📅 {f.ano_plantacion}</div>}
                 {f.poligono && <div className="info-row">📐 {f.poligono} {f.parcela}</div>}
               </div>
               {f.notas && <p className="finca-card-notes">{f.notas}</p>}
               <div className="finca-card-actions">
-                <button className="btn btn-small" onClick={() => onNavigate?.('finca_detalle', f.id_finca)} style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }} aria-label={`Ver detalle ${f.nombre}`}>📋 Detalle</button>
-                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)} aria-label={`Editar finca ${f.nombre}`}>✏️ Editar</button>
-                <button className="btn btn-small btn-danger" onClick={() => handleDelete(f.id_finca)} aria-label={`Eliminar finca ${f.nombre}`}>🗑️</button>
+                <button className="btn btn-small" onClick={() => onNavigate?.('finca_detalle', f.id_finca)} style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }} aria-label={`Ver detalle ${f.nombre}`}> Detalle</button>
+                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)} aria-label={`Editar finca ${f.nombre}`}> Editar</button>
+                <button className="btn btn-small btn-danger" onClick={() => handleDelete(f.id_finca)} aria-label={`Eliminar finca ${f.nombre}`}></button>
               </div>
             </div>
           ))
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🌍</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontraron fincas con esa búsqueda' : 'No hay fincas registradas'}
             </div>

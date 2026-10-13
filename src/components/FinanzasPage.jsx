@@ -96,8 +96,8 @@ function FinanzasPage({ fincas, params, onDataChange }) {
     <div>
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span>⚠️ {error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar">🔄 Reintentar</button>
+          <span> {error}</span>
+          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar"> Reintentar</button>
         </div>
       )}
       <div className="flex gap-16 mb-24 flex-wrap">
@@ -135,7 +135,7 @@ function FinanzasPage({ fincas, params, onDataChange }) {
 
       {/* Gráfico de evolución mensual */}
       <div className="card">
-        <div className="card-title">📈 Evolución de Gastos (últimos 12 meses)</div>
+        <div className="card-title"> Evolución de Gastos (últimos 12 meses)</div>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={datosMes}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -150,7 +150,7 @@ function FinanzasPage({ fincas, params, onDataChange }) {
 
       {/* Detalle del mes */}
       <div className="card">
-        <div className="card-title">📋 Detalle del mes: {datosActuales ? format(new Date(datosActuales.mesKey + '-01'), 'MMMM yyyy', { locale: es }) : ''}</div>
+        <div className="card-title"> Detalle del mes: {datosActuales ? format(new Date(datosActuales.mesKey + '-01'), 'MMMM yyyy', { locale: es }) : ''}</div>
         <div className="table-container">
           <table className="data-table">
             <thead>
@@ -184,7 +184,7 @@ function FinanzasPage({ fincas, params, onDataChange }) {
 
       {/* Resumen anual */}
       <div className="card">
-        <div className="card-title">📊 Resumen Anual (últimos 12 meses)</div>
+        <div className="card-title"> Resumen Anual (últimos 12 meses)</div>
         <div className="summary-grid">
           <div className="summary-card">
             <div className="summary-value">{totalGastosAnual.toFixed(2)} €</div>
