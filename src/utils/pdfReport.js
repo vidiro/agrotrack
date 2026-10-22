@@ -262,31 +262,58 @@ export function generateReportPDF(opts) {
     y = doc.lastAutoTable.finalY + 10
   }
 
-  // === PRODUCCIÓN POR FINCA ===
-  if (produccionPorFinca && produccionPorFinca.length > 0) {
-    sectionTitle('Producción por Finca', [142, 68, 173])
+  // === PRODUCCIÓN POR FINCA (separada por cultivo) ===
+  if (produccionPorFinca && (produccionPorFinca.vina.length > 0 || produccionPorFinca.olivar.length > 0)) {
+    const VINA_COLOR = [40, 90, 150]
+    const OLIVAR_COLOR = [120, 100, 30]
 
-    doc.autoTable({
-      startY: y,
-      head: [['Finca', 'Cultivos', 'Kg cosechados', 'Aceite potencial (kg)']],
-      body: produccionPorFinca.map(f => [
-        f.finca,
-        f.cultivos,
-        f.kg.toFixed(0) + ' kg',
-        f.aceite > 0 ? f.aceite.toFixed(1) + ' kg' : '-'
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: [142, 68, 173], fontSize: 8 },
-      bodyStyles: { fontSize: 8, cellPadding: 2 },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 35 },
-        2: { halign: 'right', cellWidth: 35 },
-        3: { halign: 'right', cellWidth: 35 },
-      },
-      margin: { left: 18, right: 18 },
-    })
-    y = doc.lastAutoTable.finalY + 8
+    if (produccionPorFinca.vina.length > 0) {
+      sectionTitle('Producción por Finca — Viña', VINA_COLOR)
+
+      doc.autoTable({
+        startY: y,
+        head: [['Finca', 'Kg uva', 'Kilogrados']],
+        body: produccionPorFinca.vina.map(f => [
+          f.finca,
+          f.kg.toFixed(0) + ' kg',
+          f.kilogrados > 0 ? f.kilogrados.toLocaleString('es-ES') + ' kg°' : '-'
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: VINA_COLOR, fontSize: 8 },
+        bodyStyles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { halign: 'right', cellWidth: 45 },
+          2: { halign: 'right', cellWidth: 45 },
+        },
+        margin: { left: 18, right: 18 },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+
+    if (produccionPorFinca.olivar.length > 0) {
+      sectionTitle('Producción por Finca — Olivar', OLIVAR_COLOR)
+
+      doc.autoTable({
+        startY: y,
+        head: [['Finca', 'Kg aceituna', 'Aceite pot. (kg)']],
+        body: produccionPorFinca.olivar.map(f => [
+          f.finca,
+          f.kg.toFixed(0) + ' kg',
+          f.aceite > 0 ? f.aceite.toFixed(1) + ' kg' : '-'
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: OLIVAR_COLOR, fontSize: 8 },
+        bodyStyles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { halign: 'right', cellWidth: 45 },
+          2: { halign: 'right', cellWidth: 45 },
+        },
+        margin: { left: 18, right: 18 },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
   }
 
   // === COSTES POR FINCA + COSTE/BENEFICIO ===
@@ -294,8 +321,9 @@ export function generateReportPDF(opts) {
     sectionTitle('Análisis Coste/Beneficio por Finca', GOLD)
 
     const fincaAnalysis = costesPorFinca.map(cf => {
-      const prod = produccionPorFinca ? produccionPorFinca.find(pf => pf.finca === cf.finca) : null
-      const prodKg = prod ? prod.kg : 0
+      const prodVina = produccionPorFinca?.vina?.find(pf => pf.finca === cf.finca)
+      const prodOlivar = produccionPorFinca?.olivar?.find(pf => pf.finca === cf.finca)
+      const prodKg = (prodVina?.kg || 0) + (prodOlivar?.kg || 0)
       const benefit = prodKg > 0 ? '✅' : '⚠️'
       const costeKg = prodKg > 0 ? (cf.total / prodKg).toFixed(2) : '-'
       return [

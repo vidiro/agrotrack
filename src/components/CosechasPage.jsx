@@ -550,7 +550,6 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
                 <select name="cultivo" className="form-select" value={form.cultivo} onChange={handleChange}>
                   <option value="Viña">Viña</option>
                   <option value="Olivar">Olivar</option>
-                  <option value="Viña y Olivar">Viña y Olivar</option>
                 </select>
               </div>
               <div className="form-group">

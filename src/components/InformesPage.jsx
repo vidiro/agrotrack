@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts'
 import { downloadCSV } from '../utils/csvExport'
 import { generateReportPDF } from '../utils/pdfReport'
+import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
 import { getParamValue } from '../utils/params'
 
 const COLORES = ['#1a472a', '#d4a017', '#c0392b', '#2980b9', '#8e44ad', '#27ae60', '#e67e22', '#16a085']
@@ -148,22 +149,28 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
     return Object.entries(origens).map(([nombre, valor]) => ({ nombre, valor: Math.round(valor * 100) / 100 })).sort((a, b) => b.valor - a.valor)
   }, [ingresosFiltrados])
 
-  // === Producción por finca ===
+  // === Producción por finca (separada por cultivo: Viña u Olivar) ===
   const produccionPorFinca = useMemo(() => {
-    const fincasData = {}
+    const grupos = { Viña: {}, Olivar: {} }
     cosechasFiltradas.forEach(c => {
       const nombre = fincas.find(f => String(f.id_finca) === String(c.id_finca))?.nombre || c.finca_nombre || 'Sin finca'
-      if (!fincasData[nombre]) fincasData[nombre] = { kg: 0, cultivo: new Set(), aceite: 0 }
-      fincasData[nombre].kg += c.kg || 0
-      if (c.cultivo) fincasData[nombre].cultivo.add(c.cultivo)
-      fincasData[nombre].aceite += c.aceite_potencial || 0
+      const esOlivar = (c.cultivo || '').toUpperCase().includes('OLIVAR')
+      const tipo = esOlivar ? 'Olivar' : 'Viña'
+      const bucket = grupos[tipo]
+      if (!bucket[nombre]) bucket[nombre] = { kg: 0, kilogrados: 0, aceite: 0 }
+      bucket[nombre].kg += parseFloat(c.kg) || 0
+      if (tipo === 'Viña') bucket[nombre].kilogrados += cosechaKilogrados(c) || 0
+      else bucket[nombre].aceite += cosechaAceite(c) || 0
     })
-    return Object.entries(fincasData).map(([nombre, data]) => ({
-      finca: nombre,
-      kg: Math.round(data.kg * 100) / 100,
-      cultivos: Array.from(data.cultivo).join(', '),
-      aceite: Math.round(data.aceite * 100) / 100
-    })).sort((a, b) => b.kg - a.kg)
+    const armar = (obj) => Object.entries(obj)
+      .map(([nombre, d]) => ({
+        finca: nombre,
+        kg: Math.round(d.kg * 100) / 100,
+        kilogrados: Math.round(d.kilogrados),
+        aceite: Math.round(d.aceite * 100) / 100
+      }))
+      .sort((a, b) => b.kg - a.kg)
+    return { vina: armar(grupos['Viña']), olivar: armar(grupos['Olivar']) }
   }, [cosechasFiltradas, fincas])
 
   // === Costes por finca ===
@@ -326,8 +333,11 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
       { concepto: '  - Gasóleo', valor: totales.totalCosteGasoil.toFixed(2) + ' €' },
       { concepto: 'Balance', valor: totales.balance.toFixed(2) + ' €' },
       { concepto: '', valor: '' },
-      { concepto: 'PRODUCCIÓN', valor: '' },
-      ...produccionPorFinca.map(f => ({ concepto: f.finca, valor: f.kg + ' kg (' + f.cultivos + ')' })),
+      { concepto: 'PRODUCCIÓN — VIÑA', valor: '' },
+      ...produccionPorFinca.vina.map(f => ({ concepto: f.finca, valor: `${f.kg} kg${f.kilogrados > 0 ? ` · ${f.kilogrados} kg°` : ''}` })),
+      { concepto: '', valor: '' },
+      { concepto: 'PRODUCCIÓN — OLIVAR', valor: '' },
+      ...produccionPorFinca.olivar.map(f => ({ concepto: f.finca, valor: `${f.kg} kg${f.aceite > 0 ? ` · ${f.aceite.toFixed(1)} kg aceite` : ''}` })),
       { concepto: '', valor: '' },
       { concepto: 'GASTOS POR CATEGORÍA', valor: '' },
       ...gastosPorCategoria.map(g => ({ concepto: g.nombre, valor: g.valor.toFixed(2) + ' €' })),
@@ -540,17 +550,39 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
 
       {/* PRODUCCIÓN POR FINCA */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title"> Producción por Finca</div>
-        {produccionPorFinca.length > 0 ? (
-          <div className="table-container">
-            <table className="data-table">
-              <thead><tr><th>Finca</th><th>Cultivos</th><th style={{ textAlign: 'right' }}>Kg</th><th style={{ textAlign: 'right' }}>Aceite</th></tr></thead>
-              <tbody>
-                {produccionPorFinca.map((f, i) => (
-                  <tr key={i}><td>{f.finca}</td><td>{f.cultivos}</td><td style={{ textAlign: 'right' }}>{f.kg}</td><td style={{ textAlign: 'right' }}>{f.aceite > 0 ? f.aceite : '-'}</td></tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="card-title"> 🌱 Producción por Finca</div>
+        {produccionPorFinca.vina.length > 0 || produccionPorFinca.olivar.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {produccionPorFinca.vina.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--vina-accent)', marginBottom: 6 }}>{'🍇 Viña'}</div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead><tr><th>Finca</th><th style={{ textAlign: 'right' }}>Kg uva</th><th style={{ textAlign: 'right' }}>Kilogrados</th></tr></thead>
+                    <tbody>
+                      {produccionPorFinca.vina.map((f, i) => (
+                        <tr key={i}><td>{f.finca}</td><td style={{ textAlign: 'right' }}>{f.kg}</td><td style={{ textAlign: 'right' }}>{f.kilogrados > 0 ? f.kilogrados : '-'}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {produccionPorFinca.olivar.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--olivar-accent)', marginBottom: 6 }}>{'🫒 Olivar'}</div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead><tr><th>Finca</th><th style={{ textAlign: 'right' }}>Kg aceituna</th><th style={{ textAlign: 'right' }}>Aceite pot.</th></tr></thead>
+                    <tbody>
+                      {produccionPorFinca.olivar.map((f, i) => (
+                        <tr key={i}><td>{f.finca}</td><td style={{ textAlign: 'right' }}>{f.kg}</td><td style={{ textAlign: 'right' }}>{f.aceite > 0 ? f.aceite.toFixed(1) : '-'}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="empty-state"><div className="empty-state-text">Sin producción en este período</div></div>
