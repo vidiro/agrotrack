@@ -1,66 +1,31 @@
 /**
- * Helper para renderizar iconos de lucide-react por nombre
- * Todos con size=20 y strokeWidth=2 por defecto
+ * Helper para renderizar iconos de lucide-react por nombre.
+ * Importaciones explícitas (no `import *`) para que el bundle solo incluya los iconos usados.
+ * Para añadir un icono nuevo: impórtalo aquí y añádelo a ICONS.
  */
-import * as LucideIcons from 'lucide-react'
+import {
+  Home, ClipboardList, Grape, Wallet, BarChart3, SprayCan, Receipt, Banknote,
+  Factory, MapPin, FileText, Users, Tractor, Wrench, Package, Settings,
+  Sun, Moon, LogOut, Menu, X, MoreHorizontal, RefreshCw, Eye,
+  EyeOff, FileSpreadsheet, Sprout, FolderOpen, CalendarClock, BookOpen, Clock, Briefcase,
+  Contrast, CloudOff, Camera, Paperclip, ListChecks, DatabaseBackup, AlertTriangle, ChevronRight,
+  CheckCircle2, ChevronLeft, StickyNote, Circle, Trash2, PlusCircle, Plus,
+} from 'lucide-react'
 
-const iconMap = {
-  Home: 'Home',
-  ClipboardList: 'ClipboardList',
-  Grape: 'Grape',
-  Wallet: 'Wallet',
-  BarChart3: 'BarChart3',
-  SprayCan: 'SprayCan',
-  Receipt: 'Receipt',
-  Banknote: 'Banknote',
-  Factory: 'Factory',
-  MapPin: 'MapPin',
-  FileText: 'FileText',
-  Users: 'Users',
-  Tractor: 'Tractor',
-  Wrench: 'Wrench',
-  Package: 'Package',
-  Settings: 'Settings',
-  Sun: 'Sun',
-  Moon: 'Moon',
-  LogOut: 'LogOut',
-  Menu: 'Menu',
-  X: 'X',
-  Plus: 'Plus',
-  Search: 'Search',
-  ChevronDown: 'ChevronDown',
-  TrendingUp: 'TrendingUp',
-  TrendingDown: 'TrendingDown',
-  ArrowUp: 'ArrowUp',
-  ArrowDown: 'ArrowDown',
-  Leaf: 'Leaf',
-  Sprout: 'Sprout',
-  Calendar: 'Calendar',
-  Download: 'Download',
-  Edit: 'Edit',
-  Trash2: 'Trash2',
-  RefreshCw: 'RefreshCw',
-  AlertTriangle: 'AlertTriangle',
-  Check: 'Check',
-  FileSpreadsheet: 'FileSpreadsheet',
-  FileText: 'FileText',
-  MoreHorizontal: 'MoreHorizontal',
-  SunMoon: 'SunMoon',
-  Droplets: 'Droplets',
-  Zap: 'Zap',
-  Truck: 'Truck',
-  ShoppingCart: 'ShoppingCart',
-  Tag: 'Tag',
-  Eye: 'Eye',
-  EyeOff: 'EyeOff',
+const ICONS = {
+  Home, ClipboardList, Grape, Wallet, BarChart3, SprayCan, Receipt, Banknote,
+  Factory, MapPin, FileText, Users, Tractor, Wrench, Package, Settings,
+  Sun, Moon, LogOut, Menu, X, MoreHorizontal, RefreshCw, Eye,
+  EyeOff, FileSpreadsheet, Sprout, FolderOpen, CalendarClock, BookOpen, Clock, Briefcase,
+  Contrast, CloudOff, Camera, Paperclip, ListChecks, DatabaseBackup, AlertTriangle, ChevronRight,
+  CheckCircle2, ChevronLeft, StickyNote, Circle, Trash2, PlusCircle, Plus,
 }
 
 export function getIcon(name, props = {}) {
-  const iconName = iconMap[name] || name
-  const IconComponent = LucideIcons[iconName]
+  const IconComponent = ICONS[name]
   if (!IconComponent) {
-    console.warn(`Icon "${name}" not found in lucide-react`)
+    if (import.meta.env.DEV) console.warn(`Icono "${name}" no registrado en utils/lucideIcons.jsx`)
     return null
   }
-  return <IconComponent {...props} />
+  return <IconComponent aria-hidden="true" {...props} />
 }

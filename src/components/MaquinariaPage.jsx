@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
 
 function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
@@ -151,7 +152,7 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -161,7 +162,7 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
             aria-label="Buscar maquinaria"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
@@ -245,8 +246,8 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
                     <td>{m.coste_h ? `${m.coste_h.toFixed(2)} €` : '-'}</td>
                     <td>{m.consumo_l_h ? `${m.consumo_l_h} L` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)} aria-label={`Editar maquinaria ${m.marca_modelo || m.tipo}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(m.id_equipo)} aria-label={`Eliminar maquinaria ${m.marca_modelo || m.tipo}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(m)} aria-label={`Editar maquinaria ${m.marca_modelo || m.tipo}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(m.id_equipo)} aria-label={`Eliminar maquinaria ${m.marca_modelo || m.tipo}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}
@@ -255,7 +256,7 @@ function MaquinariaPage({ maquinaria: maquinariaOrig, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontró maquinaria con esa búsqueda' : 'No hay equipos registrados'}
             </div>

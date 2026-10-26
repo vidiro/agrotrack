@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import { fetchAll } from '../utils/fetchAll'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { laborFincaIds } from '../utils/labores'
 
-function AplicacionesPage({ fincas, onDataChange }) {
+const CAMPOS_CUADERNO = ['fecha_aplicacion', 'num_registro', 'cultivo', 'superficie_ha', 'aplicador', 'carnet_aplicador', 'id_equipo']
+
+function AplicacionesPage({ fincas, personal = [], maquinaria = [], onDataChange }) {
   const [aplicaciones, setAplicaciones] = useState([])
   const [labores, setLabores] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,7 +27,8 @@ function AplicacionesPage({ fincas, onDataChange }) {
     volumen_caldo: '',
     carencia_dias: '',
     justificacion: '',
-    observaciones: ''
+    observaciones: '',
+    fecha_aplicacion: '', num_registro: '', cultivo: '', superficie_ha: '', aplicador: '', carnet_aplicador: '', id_equipo: ''
   })
 
   const loadData = async () => {
@@ -30,9 +36,11 @@ function AplicacionesPage({ fincas, onDataChange }) {
     setError('')
     try {
       const [appRes, labRes] = await Promise.all([
-        supabase.from('aplicaciones').select('*').order('created_en', { ascending: false }),
-        supabase.from('labores').select('*').order('fecha', { ascending: false })
+        fetchAll('aplicaciones', q => q.order('id_aplicacion', { ascending: false })),
+        fetchAll('labores', q => q.order('fecha', { ascending: false }))
       ])
+      if (appRes.error) throw appRes.error
+      if (labRes.error) throw labRes.error
       setAplicaciones(appRes.data || [])
       setLabores(labRes.data || [])
     } catch (err) {
@@ -46,8 +54,24 @@ function AplicacionesPage({ fincas, onDataChange }) {
     loadData()
   }, [])
 
+  const nombresFincas = (l) => [...new Set(laborFincaIds(l))].map(id => fincas.find(f => String(f.id_finca) === id)?.nombre).filter(Boolean).join(', ') || 'Sin finca'
+
+  // Aplicadores ya usados (para autocompletar el nº de carné)
+  const aplicadores = [...new Map(aplicaciones.filter(a => a.aplicador).map(a => [a.aplicador.toLowerCase(), a])).values()]
+
   const handleChange = (e) => {
     const { name, value } = e.target
+    if (name === 'aplicador') {
+      const previo = aplicadores.find(a => a.aplicador.toLowerCase() === value.trim().toLowerCase())
+      setForm({ ...form, aplicador: value, carnet_aplicador: form.carnet_aplicador || previo?.carnet_aplicador || '' })
+      return
+    }
+    if (name === 'id_labor') {
+      // Al elegir la labor, se propone su fecha como fecha de aplicación
+      const l = labores.find(x => String(x.id_labor) === String(value))
+      setForm({ ...form, id_labor: value, fecha_aplicacion: form.fecha_aplicacion || (l?.fecha || '').substring(0, 10) })
+      return
+    }
     setForm({ ...form, [name]: value })
   }
 
@@ -66,6 +90,18 @@ function AplicacionesPage({ fincas, onDataChange }) {
       justificacion: form.justificacion || null,
       observaciones: form.observaciones || null
     }
+    // Datos del cuaderno de campo (migración v1.8): solo se envían si hay alguno
+    for (const c of CAMPOS_CUADERNO) delete datos[c]
+    const original = editingId ? aplicaciones.find(a => a.id_aplicacion === editingId) : null
+    if (CAMPOS_CUADERNO.some(c => String(form[c] || '').trim() || original?.[c])) {
+      datos.fecha_aplicacion = form.fecha_aplicacion || null
+      datos.num_registro = form.num_registro.trim() || null
+      datos.cultivo = form.cultivo.trim() || null
+      datos.superficie_ha = form.superficie_ha ? parseFloat(form.superficie_ha) : null
+      datos.aplicador = form.aplicador.trim() || null
+      datos.carnet_aplicador = form.carnet_aplicador.trim() || null
+      datos.id_equipo = form.id_equipo || null
+    }
 
     try {
       if (editingId) {
@@ -82,13 +118,16 @@ function AplicacionesPage({ fincas, onDataChange }) {
       onDataChange?.()
       setForm({
         id_labor: '', producto: '', materia_activa: '', dosis: '',
-        volumen_caldo: '', carencia_dias: '', justificacion: '', observaciones: ''
+        volumen_caldo: '', carencia_dias: '', justificacion: '', observaciones: '',
+        fecha_aplicacion: '', num_registro: '', cultivo: '', superficie_ha: '', aplicador: '', carnet_aplicador: '', id_equipo: ''
       })
       setEditingId(null)
       setShowForm(false)
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
-      setError(err.message)
+      setError(/fecha_aplicacion|num_registro|aplicador|superficie_ha|id_equipo|cultivo/.test(err.message || '')
+        ? 'Para guardar los datos del cuaderno de campo hay que aplicar la migración docs/SQL_migracion_v1.8_papeleo.sql en Supabase.'
+        : err.message)
       // NO cerramos el formulario si falla
     } finally {
       setSaving(false)
@@ -104,7 +143,14 @@ function AplicacionesPage({ fincas, onDataChange }) {
       volumen_caldo: app.volumen_caldo || '',
       carencia_dias: app.carencia_dias || '',
       justificacion: app.justificacion || '',
-      observaciones: app.observaciones || ''
+      observaciones: app.observaciones || '',
+      fecha_aplicacion: app.fecha_aplicacion || '',
+      num_registro: app.num_registro || '',
+      cultivo: app.cultivo || '',
+      superficie_ha: app.superficie_ha ?? '',
+      aplicador: app.aplicador || '',
+      carnet_aplicador: app.carnet_aplicador || '',
+      id_equipo: app.id_equipo || ''
     })
     setEditingId(app.id_aplicacion)
     setShowForm(true)
@@ -123,10 +169,9 @@ function AplicacionesPage({ fincas, onDataChange }) {
   }
 
   const laborInfo = (id) => {
-    const l = labores.find(l => l.id_labor === id)
+    const l = labores.find(l => String(l.id_labor) === String(id))
     if (!l) return '-'
-    const finca = fincas.find(f => f.id_finca === l.id_finca)
-    return `${l.fecha ? format(new Date(l.fecha), 'dd/MM') : '-'} ${finca ? finca.nombre : ''}`
+    return `${l.fecha ? format(new Date(l.fecha + 'T00:00:00'), 'dd/MM') : '-'} ${nombresFincas(l)}`
   }
 
   // Filtrar por búsqueda
@@ -160,7 +205,7 @@ function AplicacionesPage({ fincas, onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -170,7 +215,7 @@ function AplicacionesPage({ fincas, onDataChange }) {
             aria-label="Buscar aplicaciones"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button
@@ -183,16 +228,16 @@ function AplicacionesPage({ fincas, onDataChange }) {
 
       {showForm && (
         <div className="card">
-          <div className="card-title"> Nueva Aplicación Fitosanitaria</div>
+          <div className="card-title">{editingId ? 'Editar tratamiento' : 'Nuevo tratamiento fitosanitario'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Labor asociada</label>
                 <select name="id_labor" className="form-select" value={form.id_labor} onChange={handleChange}>
                   <option value="">Seleccionar labor...</option>
-                  {labores.filter(l => l.id_finca).map(l => (
+                  {labores.filter(l => laborFincaIds(l).length > 0).map(l => (
                     <option key={l.id_labor} value={l.id_labor}>
-                      {l.fecha ? format(new Date(l.fecha), 'dd/MM/yyyy') : '-'} - {fincas.find(f => f.id_finca === l.id_finca)?.nombre || 'Sin finca'}
+                      {l.fecha ? format(new Date(l.fecha + 'T00:00:00'), 'dd/MM/yyyy') : '-'} - {nombresFincas(l)}{l.tipo_trabajo ? ` · ${l.tipo_trabajo}` : ''}
                     </option>
                   ))}
                 </select>
@@ -220,8 +265,52 @@ function AplicacionesPage({ fincas, onDataChange }) {
                 <input type="number" name="carencia_dias" className="form-input" value={form.carencia_dias} onChange={handleChange} min="0" />
               </div>
             </div>
+            <fieldset style={{ border: '1px solid var(--color-border)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+              <legend style={{ fontSize: 13, fontWeight: 600, padding: '0 6px' }}>Para el cuaderno de campo</legend>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-fecha">Fecha de aplicación</label>
+                  <input id="ap-fecha" type="date" name="fecha_aplicacion" className="form-input" value={form.fecha_aplicacion} onChange={handleChange} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-registro">Nº de registro del producto</label>
+                  <input id="ap-registro" type="text" name="num_registro" className="form-input" value={form.num_registro} onChange={handleChange} placeholder="Ej: ES-00123" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-cultivo">Cultivo</label>
+                  <input id="ap-cultivo" type="text" name="cultivo" className="form-input" list="ap-cultivos" value={form.cultivo} onChange={handleChange} placeholder="Viña, olivar…" />
+                  <datalist id="ap-cultivos"><option value="Viña" /><option value="Olivar" /></datalist>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-sup">Superficie tratada (ha)</label>
+                  <input id="ap-sup" type="number" name="superficie_ha" className="form-input" value={form.superficie_ha} onChange={handleChange} step="0.01" min="0" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-aplicador">Aplicador</label>
+                  <input id="ap-aplicador" type="text" name="aplicador" className="form-input" list="ap-aplicadores" value={form.aplicador} onChange={handleChange} placeholder="Nombre de quien trata" />
+                  <datalist id="ap-aplicadores">
+                    {[...new Set([...personal.map(p => p.nombre), ...aplicadores.map(a => a.aplicador)].filter(Boolean))].map(n => <option key={n} value={n} />)}
+                  </datalist>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="ap-carnet">Nº carné de aplicador</label>
+                  <input id="ap-carnet" type="text" name="carnet_aplicador" className="form-input" value={form.carnet_aplicador} onChange={handleChange} />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="ap-equipo">Equipo de aplicación</label>
+                <select id="ap-equipo" name="id_equipo" className="form-select" value={form.id_equipo} onChange={handleChange}>
+                  <option value="">—</option>
+                  {maquinaria.map(m => <option key={m.id_equipo} value={m.id_equipo}>{m.tipo} {m.marca_modelo ? `· ${m.marca_modelo}` : ''}</option>)}
+                </select>
+              </div>
+            </fieldset>
             <div className="form-group">
-              <label className="form-label">Justificación</label>
+              <label className="form-label">Justificación (plaga o enfermedad)</label>
               <textarea name="justificacion" className="form-textarea" value={form.justificacion} onChange={handleChange} placeholder="Motivo de la aplicación..." />
             </div>
             <div className="form-group">
@@ -263,8 +352,8 @@ function AplicacionesPage({ fincas, onDataChange }) {
                     </td>
                     <td>{laborInfo(a.id_labor)}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar aplicación ${a.producto}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_aplicacion)} aria-label={`Eliminar aplicación ${a.producto}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar aplicación ${a.producto}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_aplicacion)} aria-label={`Eliminar aplicación ${a.producto}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}
@@ -273,7 +362,7 @@ function AplicacionesPage({ fincas, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">No hay aplicaciones registradas</div>
           </div>
         )}

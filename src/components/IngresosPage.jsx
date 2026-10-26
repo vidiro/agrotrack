@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import { fetchAll } from '../utils/fetchAll'
+import { cosechaFincaId } from '../utils/cosecha'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { downloadCSV } from '../utils/csvExport'
@@ -30,8 +33,8 @@ function IngresosPage({ fincas, params, onDataChange }) {
     setError('')
     try {
       const [ingRes, cosechRes] = await Promise.all([
-        supabase.from('ingresos').select('*').order('fecha', { ascending: false }),
-        supabase.from('cosechas').select('*').order('fecha', { ascending: false })
+        fetchAll('ingresos', q => q.order('fecha', { ascending: false })),
+        fetchAll('cosechas', q => q.order('fecha', { ascending: false }))
       ])
       if (ingRes.error) throw ingRes.error
       if (cosechRes.error) throw cosechRes.error
@@ -143,7 +146,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
   const getCosechaInfo = (id) => {
     const c = cosechas.find(c => c.id_cosecha === id)
     if (!c) return '-'
-    const finca = fincas.find(f => f.id_finca === c.id_parcela)
+    const finca = fincas.find(f => String(f.id_finca) === cosechaFincaId(c))
     return `${c.fecha ? format(new Date(c.fecha), 'dd/MM/yyyy') : '-'} - ${finca?.nombre || 'Sin finca'} - ${c.kg ? c.kg.toFixed(0) + ' kg' : ''} ${c.variedad || ''}`
   }
 
@@ -180,7 +183,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
       {/* Barra de búsqueda y exportar */}
       <div className="fincas-toolbar mb-16" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -190,7 +193,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
             aria-label="Buscar ingresos"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button className="btn btn-small btn-accent" onClick={() => {
@@ -249,7 +252,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
                 <select name="id_cosecha" className="form-select" value={form.id_cosecha} onChange={handleChange} required>
                   <option value="">Seleccionar cosecha...</option>
                   {cosechas.filter(c => c.kg).map(c => {
-                    const finca = fincas.find(f => f.id_finca === c.id_parcela)
+                    const finca = fincas.find(f => String(f.id_finca) === cosechaFincaId(c))
                     return (
                       <option key={c.id_cosecha} value={c.id_cosecha}>
                         {c.fecha ? format(new Date(c.fecha), 'dd/MM/yyyy') : '-'} - {finca?.nombre || 'Sin finca'} - {c.kg.toFixed(0)} kg {c.variedad || ''}
@@ -316,8 +319,8 @@ function IngresosPage({ fincas, params, onDataChange }) {
                     <td>{i.origen === 'Cosecha' && i.id_cosecha ? getCosechaInfo(i.id_cosecha) : '-'}</td>
                     <td><strong style={{ color: 'var(--color-success)' }}>{i.cantidad ? `${i.cantidad.toFixed(2)} €` : '-'}</strong></td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(i)} aria-label={`Editar ingreso ${i.concepto || i.origen}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(i.id_ingreso)} aria-label={`Eliminar ingreso ${i.concepto || i.origen}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(i)} aria-label={`Editar ingreso ${i.concepto || i.origen}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(i.id_ingreso)} aria-label={`Eliminar ingreso ${i.concepto || i.origen}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}
@@ -326,7 +329,7 @@ function IngresosPage({ fincas, params, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">No hay ingresos registrados</div>
           </div>
         )}

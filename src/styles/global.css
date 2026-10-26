@@ -1346,3 +1346,740 @@ body {
     display: none;
   }
 }
+
+/* ============================================
+   v1.8 · Navegación por bloques
+   ============================================ */
+
+.nav-menu ul,
+.sidebar-footer ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-grupo + .nav-grupo {
+  margin-top: 10px;
+}
+
+.nav-grupo-titulo {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lino);
+  opacity: 0.75;
+  padding: 8px 14px 2px;
+}
+
+.section-tabs {
+  margin: -8px 0 20px;
+}
+
+.section-tabs-titulo {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  margin-bottom: 8px;
+}
+
+.section-tabs-lista {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.section-tabs-lista::-webkit-scrollbar {
+  display: none;
+}
+
+.section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radio-completo);
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--fuente-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.section-tab.active {
+  background: var(--verde-campo);
+  border-color: var(--verde-campo);
+  color: var(--lino);
+  font-weight: 600;
+}
+
+.estado-conexion {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radio-completo);
+  background: var(--aviso-fondo);
+  color: #7a5a00;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ============================================
+   Inicio: lista de pendientes
+   ============================================ */
+
+.pendientes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pendiente {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
+  border-radius: var(--radio-campo);
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--fuente-ui);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pendiente:hover {
+  border-color: var(--verde-campo);
+}
+
+.pendiente-icono {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fondo);
+}
+
+.pendiente.urgente .pendiente-icono {
+  background: var(--error-fondo);
+  color: var(--rojo);
+}
+
+.pendiente.aviso .pendiente-icono {
+  background: var(--aviso-fondo);
+  color: #7a5a00;
+}
+
+.pendiente-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.pendiente-detalle {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+/* ============================================
+   Tablas como tarjetas en el móvil
+   (las etiquetas data-label las pone utils/tablasMovil.js)
+   ============================================ */
+
+@media (max-width: 640px) {
+  .table-container {
+    overflow-x: visible;
+  }
+
+  .data-table.tarjetas thead {
+    display: none;
+  }
+
+  .data-table.tarjetas,
+  .data-table.tarjetas tbody,
+  .data-table.tarjetas tr,
+  .data-table.tarjetas td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table.tarjetas tr {
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-campo);
+    background: var(--superficie);
+    padding: 6px 12px;
+    margin-bottom: 10px;
+  }
+
+  .data-table.tarjetas td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--borde);
+    text-align: right !important;
+  }
+
+  .data-table.tarjetas td:last-child {
+    border-bottom: none;
+  }
+
+  .data-table.tarjetas td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    max-width: 45%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+    text-align: left;
+  }
+
+  .data-table.tarjetas td[data-label=""]::before {
+    display: none;
+  }
+
+  .data-table.tarjetas td > * {
+    text-align: right;
+  }
+
+  .data-table.tarjetas td[colspan] {
+    justify-content: flex-start;
+    text-align: left !important;
+  }
+}
+
+/* ============================================
+   Modo campo: alto contraste y botones grandes (para usar al sol)
+   ============================================ */
+
+:root.modo-campo {
+  --fondo: #ffffff;
+  --superficie: #ffffff;
+  --tinta: #000000;
+  --texto-suave: #1d241f;
+  --borde: #5a6b5f;
+  --verde-campo: #0f3b24;
+  --color-text-muted: #2b332d;
+}
+
+:root.modo-campo body {
+  font-size: 1.08rem;
+}
+
+:root.modo-campo .btn,
+:root.modo-campo .form-input,
+:root.modo-campo .form-select,
+:root.modo-campo .section-tab {
+  min-height: 52px;
+  font-size: 1.02rem;
+  border-width: 2px;
+}
+
+:root.modo-campo .btn-small {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+:root.modo-campo .card,
+:root.modo-campo .summary-card,
+:root.modo-campo .pendiente {
+  border: 2px solid var(--borde);
+  box-shadow: none;
+}
+
+:root.modo-campo .data-table td {
+  font-size: 0.98rem;
+}
+
+:root.modo-campo .bottom-nav-item {
+  font-size: 0.8rem;
+  color: #000000;
+}
+
+:root.modo-campo .bottom-nav-item.active {
+  background: var(--verde-campo);
+  color: #ffffff;
+}
+
+/* ============================================
+   Adjuntos y lectura de facturas
+   ============================================ */
+
+.zona-foto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 2px dashed var(--borde);
+  border-radius: var(--radio-campo);
+  background: var(--fondo);
+  margin-bottom: 16px;
+}
+
+.zona-foto img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radio-pequeno);
+  border: 1px solid var(--borde);
+}
+
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.checklist li > label:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.checklist input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--verde-campo);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Evita que contenido ancho (pestañas, tablas) ensanche la página en el móvil */
+.main-content {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  /* En el móvil la cabecera va encima del contenido, no al lado */
+  .app-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+}
+
+/* ============================================
+   v1.9 · Apuntar en el campo (iPhone)
+   ============================================ */
+
+.apuntar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.apuntar-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 132px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 2px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--fuente-ui);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s ease;
+}
+
+.apuntar-tile:active {
+  transform: scale(0.97);
+}
+
+.apuntar-tile-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--verde-campo);
+  color: var(--lino);
+}
+
+.apuntar-tile strong {
+  display: block;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.apuntar-tile span.sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  margin-top: 2px;
+}
+
+/* Asistente a pantalla completa */
+.asistente {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--fondo);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.asistente-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+}
+
+.asistente-cabecera h2 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.15rem;
+}
+
+.asistente-icono-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: var(--fondo);
+  color: var(--tinta);
+  cursor: pointer;
+}
+
+.asistente-pasos {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+
+.asistente-pasos span {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--borde);
+}
+
+.asistente-pasos span.hecho {
+  background: var(--verde-campo);
+}
+
+.asistente-cuerpo {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px 24px;
+}
+
+.asistente-pregunta {
+  font-family: var(--fuente-titulo);
+  font-size: 1.35rem;
+  line-height: 1.25;
+  margin: 4px 0 14px;
+}
+
+.asistente-sub {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: var(--texto-suave);
+}
+
+.asistente-pie {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+}
+
+.asistente-pie .btn {
+  flex: 1;
+  min-height: 56px;
+  font-size: 1.05rem;
+  border-radius: 16px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 2px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--fuente-ui);
+  font-size: 1rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  text-align: left;
+}
+
+.chip small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--texto-suave);
+}
+
+.chip.sel {
+  border-color: var(--verde-campo);
+  background: var(--verde-campo);
+  color: var(--lino);
+}
+
+.chip.sel small {
+  color: var(--lino);
+  opacity: 0.85;
+}
+
+.lista-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lista-opciones .chip {
+  width: 100%;
+  justify-content: space-between;
+  min-height: 56px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper button {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 2px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-size: 1.5rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepper input {
+  width: 88px;
+  height: 52px;
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  border-radius: 14px;
+  border: 2px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+}
+
+.fila-persona {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.boton-foto {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 180px;
+  border-radius: 20px;
+  border: 3px dashed var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.boton-foto img {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+}
+
+.boton-foto input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.importe-grande {
+  width: 100%;
+  height: 72px;
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 16px;
+  border: 2px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta);
+}
+
+.resumen-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: var(--superficie);
+  border-radius: 16px;
+  border: 1px solid var(--borde);
+}
+
+.resumen-lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--borde);
+  font-size: 1rem;
+}
+
+.resumen-lista li:last-child {
+  border-bottom: none;
+}
+
+.resumen-lista li span:first-child {
+  color: var(--texto-suave);
+}
+
+.resumen-lista li span:last-child {
+  font-weight: 600;
+  text-align: right;
+}
+
+.hecho-pantalla {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  min-height: 60vh;
+}
+
+.hecho-pantalla .circulo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+
+body.asistente-abierto {
+  overflow: hidden;
+}
+
+/* Margen inferior en iPhone con barra de inicio */
+@media (max-width: 768px) {
+  .main-content {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Botón flotante «Apuntar» (solo móvil) */
+.fab-apuntar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .fab-apuntar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 16px;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    z-index: 90;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    border: none;
+    background: var(--verde-campo);
+    color: var(--lino);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .fab-apuntar:active {
+    transform: scale(0.94);
+  }
+
+  .apuntar-tile {
+    min-height: 150px;
+  }
+}

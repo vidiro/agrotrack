@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
 
 function InventarioPage({ onDataChange }) {
@@ -158,7 +159,7 @@ function InventarioPage({ onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -168,7 +169,7 @@ function InventarioPage({ onDataChange }) {
             aria-label="Buscar artículos de inventario"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
@@ -273,8 +274,8 @@ function InventarioPage({ onDataChange }) {
                     </td>
                     <td>{a.precio_unitario ? `${a.precio_unitario.toFixed(2)} €` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar artículo ${a.nombre_articulo}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_articulo)} aria-label={`Eliminar artículo ${a.nombre_articulo}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(a)} aria-label={`Editar artículo ${a.nombre_articulo}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(a.id_articulo)} aria-label={`Eliminar artículo ${a.nombre_articulo}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}
@@ -283,7 +284,7 @@ function InventarioPage({ onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontraron artículos con esa búsqueda' : 'No hay artículos en inventario'}
             </div>

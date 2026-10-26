@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../data/supabaseClient'
+import { fetchAll, isMissingTable } from '../utils/fetchAll'
+import { gastosCorrientes } from '../utils/gastos'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
 import { getIcon } from '../utils/lucideIcons'
 import { getParamValue } from '../utils/params'
+import Pendientes from './Pendientes'
+import { calendarioCampanas } from '../utils/campanas'
 
-function Dashboard({ fincas, personal, maquinaria, params }) {
+function Dashboard({ fincas, personal, maquinaria, params, onNavigate }) {
   const [labores, setLabores] = useState([])
   const [cosechas, setCosechas] = useState([])
   const [gastos, setGastos] = useState([])
@@ -21,15 +25,15 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
     setError('')
     try {
       const [labRes, cosechRes, gastRes, ingrRes] = await Promise.all([
-        supabase.from('labores').select('*').order('fecha', { ascending: false }),
-        supabase.from('cosechas').select('*').order('fecha', { ascending: false }),
-        supabase.from('gastos_manual').select('*').order('fecha', { ascending: false }),
-        supabase.from('ingresos').select('*').order('fecha', { ascending: false })
+        fetchAll('labores', q => q.order('fecha', { ascending: false })),
+        fetchAll('cosechas', q => q.order('fecha', { ascending: false })),
+        fetchAll('gastos_manual', q => q.order('fecha', { ascending: false })),
+        fetchAll('ingresos', q => q.order('fecha', { ascending: false }))
       ])
       if (labRes.error) throw labRes.error
       if (cosechRes.error) throw cosechRes.error
       if (gastRes.error) throw gastRes.error
-      if (ingrRes.error && !ingrRes.message?.includes('Could not find the table')) throw ingrRes.error
+      if (ingrRes.error && !isMissingTable(ingrRes.error)) throw ingrRes.error
       setLabores(labRes.data || [])
       setCosechas(cosechRes.data || [])
       setGastos(gastRes.data || [])
@@ -53,7 +57,7 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
 
   const laboresMes = labores.filter(l => l.fecha && l.fecha.startsWith(selectedMonth))
   const cosechasMes = cosechas.filter(c => c.fecha && c.fecha.startsWith(selectedMonth))
-  const gastosMes = gastos.filter(g => g.fecha && g.fecha.startsWith(selectedMonth))
+  const gastosMes = gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.startsWith(selectedMonth))
   const ingresosMes = ingresos.filter(i => i.fecha && i.fecha.startsWith(selectedMonth))
 
   const totalCostesLabores = laboresMes.reduce((s, l) => s + (l.coste_total || 0), 0)
@@ -96,7 +100,7 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
 
   // Ingresos vs Gastos anuales
   const datosAnuales = anosUnicos.map(anio => {
-    const gastosAnio = gastos.filter(g => g.fecha && g.fecha.startsWith(anio)).reduce((s, g) => s + (g.importe || 0), 0)
+    const gastosAnio = gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.startsWith(anio)).reduce((s, g) => s + (g.importe || 0), 0)
     const laboresAnio = labores.filter(l => l.fecha && l.fecha.startsWith(anio)).reduce((s, l) => s + (l.coste_total || 0), 0)
     const ingresosAnio = ingresos.filter(i => i.fecha && i.fecha.startsWith(anio)).reduce((s, i) => s + (i.cantidad || 0), 0)
     return { año: anio, gastos: gastosAnio + laboresAnio, ingresos: ingresosAnio }
@@ -129,6 +133,9 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
           </button>
         </div>
       )}
+
+      {/* Lo primero: lo que hay que hacer */}
+      <Pendientes fincas={fincas} labores={labores} cosechas={cosechas} gastos={gastos} ingresos={ingresos} onNavigate={onNavigate} />
 
       {/* Selector de mes */}
       <div className="flex items-center gap-12 mb-24 flex-wrap" style={{ justifyContent: 'flex-end' }}>
@@ -171,7 +178,7 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
         <div className="card-title" style={{ gap: 8 }}>
           Balance del mes
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 16 }}>
           <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--texto-suave)' }}>Caja</div>
             <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.25rem', fontWeight: 700, color: balanceCaja >= 0 ? 'var(--exito)' : 'var(--error)' }}>
@@ -197,7 +204,7 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
       </div>
 
       {/* Gráficos - Barras horizontales */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16 }}>
         {/* Gastos por categoría */}
         <div className="card">
           <div className="card-title">Gastos por Categoría</div>
@@ -268,33 +275,24 @@ function Dashboard({ fincas, personal, maquinaria, params }) {
 
       {/* Balance de campaña */}
       {(() => {
-        const getVal = (keys, def) => {
-          for (const k of keys) {
-            const p = params.find(p => p.clave === k)
-            if (p) return parseFloat(p.valor) || def
-          }
-          return def
-        }
-        const campaignStartMonth = getVal(['campana_mes_inicio'], 9)
-        const campaignStartDay = getVal(['campana_dia_inicio'], 15)
-        const currentYear = new Date().getFullYear()
-        const startDate = new Date(currentYear - 1, campaignStartMonth - 1, campaignStartDay)
-        const endDate = new Date(currentYear, campaignStartMonth - 1, campaignStartDay)
-        const isWithin = (d) => { const date = new Date(d); return date >= startDate && date <= endDate }
+        // Campaña en curso, con su fecha de inicio real (Ajustes → Campañas)
+        const cal = calendarioCampanas(params)
+        const campanaActual = cal.campanaDe(new Date())
+        const { start: startDate, end: endDate } = cal.rango(campanaActual)
+        const isWithin = (d) => { const date = new Date(String(d).substring(0, 10) + 'T00:00:00'); return date >= startDate && date < endDate }
 
         const ingCampana = ingresos.filter(i => i.fecha && isWithin(i.fecha)).reduce((s, i) => s + (i.cantidad || 0), 0)
-        const gastCampana = gastos.filter(g => g.fecha && isWithin(g.fecha)).reduce((s, g) => s + (g.importe || 0), 0)
+        const gastCampana = gastosCorrientes(gastos).filter(g => g.fecha && isWithin(g.fecha)).reduce((s, g) => s + (g.importe || 0), 0)
         const costCampana = labores.filter(l => l.fecha && isWithin(l.fecha)).reduce((s, l) => s + (l.coste_total || 0), 0)
         const balCampana = ingCampana - gastCampana - costCampana
 
-        const mesNames = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-        const label = `Campaña ${currentYear} (${campaignStartDay} ${mesNames[campaignStartMonth]} ${currentYear-1} - ${campaignStartDay} ${mesNames[campaignStartMonth]} ${currentYear})`
+        const label = `${cal.etiqueta(campanaActual)} · en curso`
 
         return (
           <div className="card" style={{ borderColor: balCampana >= 0 ? 'var(--exito)' : 'var(--error)', marginTop: 16 }}>
             <div className="card-title">Balance de Campaña</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--texto-suave)', marginBottom: 12 }}>{label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
               <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
                 <div style={{ fontSize: '0.7rem', color: 'var(--texto-suave)' }}>Ingresos</div>
                 <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--exito)' }}>{ingCampana.toFixed(0)} €</div>

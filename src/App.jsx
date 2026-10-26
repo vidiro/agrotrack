@@ -1,33 +1,47 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { getIcon } from './utils/lucideIcons'
 import { supabase, isSupabaseConfigured } from './data/supabaseClient'
+import { isMissingTable } from './utils/fetchAll'
 import LoginPage from './components/LoginPage'
 import Sidebar from './components/Sidebar'
 import MobileHeader from './components/MobileHeader'
 import BottomNav from './components/BottomNav'
-import MoreSheet from './components/MoreSheet'
-import Dashboard from './components/Dashboard'
-import LaboresPage from './components/LaboresPage'
-import AplicacionesPage from './components/AplicacionesPage'
-import CosechasPage from './components/CosechasPage'
-import GastosPage from './components/GastosPage'
-import IngresosPage from './components/IngresosPage'
-import FinanzasPage from './components/FinanzasPage'
-import FincasPage from './components/FincasPage'
-import FincaDetailPage from './components/FincaDetailPage'
-import PersonalPage from './components/PersonalPage'
-import MaquinariaPage from './components/MaquinariaPage'
-import InventarioPage from './components/InventarioPage'
-import ConfiguracionPage from './components/ConfiguracionPage'
-import DestinosPage from './components/DestinosPage'
-import InformesPage from './components/InformesPage'
-import AmortizacionesPage from './components/AmortizacionesPage'
+import SectionTabs from './components/SectionTabs'
+import { iniciarColaAutomatica, esErrorDeRed } from './utils/offline'
+import { guardarCopiaLocal, leerCopiaLocal } from './utils/copiaLocal'
+import AvisoInstalar from './components/AvisoInstalar'
+
+// Páginas cargadas bajo demanda: la primera carga es más ligera
+const Dashboard = lazy(() => import('./components/Dashboard'))
+const LaboresPage = lazy(() => import('./components/LaboresPage'))
+const AplicacionesPage = lazy(() => import('./components/AplicacionesPage'))
+const CosechasPage = lazy(() => import('./components/CosechasPage'))
+const GastosPage = lazy(() => import('./components/GastosPage'))
+const FacturasPage = lazy(() => import('./components/FacturasPage'))
+const IngresosPage = lazy(() => import('./components/IngresosPage'))
+const FinanzasPage = lazy(() => import('./components/FinanzasPage'))
+const FincasPage = lazy(() => import('./components/FincasPage'))
+const FincaDetailPage = lazy(() => import('./components/FincaDetailPage'))
+const PersonalPage = lazy(() => import('./components/PersonalPage'))
+const MaquinariaPage = lazy(() => import('./components/MaquinariaPage'))
+const InventarioPage = lazy(() => import('./components/InventarioPage'))
+const ConfiguracionPage = lazy(() => import('./components/ConfiguracionPage'))
+const DestinosPage = lazy(() => import('./components/DestinosPage'))
+const InformesPage = lazy(() => import('./components/InformesPage'))
+const AmortizacionesPage = lazy(() => import('./components/AmortizacionesPage'))
+const ExpedientesPage = lazy(() => import('./components/ExpedientesPage'))
+const VencimientosPage = lazy(() => import('./components/VencimientosPage'))
+const CuadernoPage = lazy(() => import('./components/CuadernoPage'))
+const JornadasPage = lazy(() => import('./components/JornadasPage'))
+const GestoriaPage = lazy(() => import('./components/GestoriaPage'))
+const ApuntarPage = lazy(() => import('./components/ApuntarPage'))
+const NotasPage = lazy(() => import('./components/NotasPage'))
 
 function App() {
   const [session, setSession] = useState(undefined)
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [selectedFincaForDetail, setSelectedFincaForDetail] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
   const [fincas, setFincas] = useState([])
   const [personal, setPersonal] = useState([])
   const [maquinaria, setMaquinaria] = useState([])
@@ -54,6 +68,27 @@ function App() {
 
   const toggleDarkMode = () => setDarkMode(prev => !prev)
 
+  // Modo campo: alto contraste y botones más grandes para usar al sol
+  const [modoCampo, setModoCampo] = useState(() => {
+    try { return localStorage.getItem('agrotrack-modo-campo') === 'true' } catch { return false }
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('modo-campo', modoCampo)
+    try { localStorage.setItem('agrotrack-modo-campo', String(modoCampo)) } catch { /* sin almacenamiento */ }
+  }, [modoCampo])
+  const toggleModoCampo = () => setModoCampo(prev => !prev)
+
+  // Envíos guardados sin cobertura: se mandan al recuperar la señal
+  useEffect(() => { iniciarColaAutomatica() }, [])
+  useEffect(() => {
+    const alEnviar = () => { if (session) loadData() }
+    window.addEventListener('agrotrack-cola-enviada', alEnviar)
+    return () => window.removeEventListener('agrotrack-cola-enviada', alEnviar)
+  }, [session])
+
+  // Al cambiar de página, volver arriba
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [currentPage])
+
   useEffect(() => {
     let mounted = true
     supabase.auth.getSession().then(({ data: { session: next } }) => {
@@ -67,6 +102,17 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  const [sinConexion, setSinConexion] = useState(null) // fecha de la copia local en uso
+  const aplicarBase = (b) => {
+    setFincas(b.fincas || [])
+    setPersonal(b.personal || [])
+    setMaquinaria(b.maquinaria || [])
+    setParams(b.params || [])
+    setDestinos(b.destinos || [])
+    setPreciosDestino(b.preciosDestino || [])
+    setAmortizaciones(b.amortizaciones || [])
+  }
 
   const loadData = async () => {
     try {
@@ -88,21 +134,29 @@ function App() {
       if (maquinariaRes.error) throw new Error(maquinariaRes.error.message)
       if (paramsRes.error) throw new Error(paramsRes.error.message)
       // Tolerar si las tablas de destinos no existen aún
-      if (destinosRes.error && !destinosRes.message?.includes('Could not find the table')) throw new Error(destinosRes.error.message)
-      if (preciosRes.error && !preciosRes.message?.includes('Could not find the table')) throw new Error(preciosRes.error.message)
+      if (destinosRes.error && !isMissingTable(destinosRes.error)) throw new Error(destinosRes.error.message)
+      if (preciosRes.error && !isMissingTable(preciosRes.error)) throw new Error(preciosRes.error.message)
       // Tolerar si la tabla de amortizaciones no existe aún
-      if (amortRes.error && !amortRes.message?.includes('Could not find the table')) throw new Error(amortRes.error.message)
+      if (amortRes.error && !isMissingTable(amortRes.error)) throw new Error(amortRes.error.message)
 
-      setFincas(fincasRes.data || [])
-      setPersonal(personalRes.data || [])
-      setMaquinaria(maquinariaRes.data || [])
-      setParams(paramsRes.data || [])
-      setDestinos(destinosRes.data || [])
-      setPreciosDestino(preciosRes.data || [])
-      setAmortizaciones(amortRes.data || [])
+      const base = {
+        fincas: fincasRes.data || [], personal: personalRes.data || [], maquinaria: maquinariaRes.data || [],
+        params: paramsRes.data || [], destinos: destinosRes.data || [], preciosDestino: preciosRes.data || [],
+        amortizaciones: amortRes.data || [],
+      }
+      aplicarBase(base)
+      setSinConexion(null)
+      guardarCopiaLocal(base) // para poder apuntar en el campo sin cobertura
     } catch (err) {
-      console.error('Error cargando datos:', err)
-      setError('No se pudieron cargar los datos. Comprueba la conexión y que hayas ejecutado la migración SQL v1.3.')
+      // Sin cobertura: se usa la última copia guardada en el móvil
+      const copia = leerCopiaLocal()
+      if (copia && (esErrorDeRed(err) || !navigator.onLine)) {
+        aplicarBase(copia.datos)
+        setSinConexion(copia.fecha)
+      } else {
+        console.error('Error cargando datos:', err)
+        setError('No se pudieron cargar los datos. Comprueba la conexión y que estén aplicadas las migraciones SQL (carpeta docs).')
+      }
     } finally {
       setLoading(false)
     }
@@ -114,7 +168,8 @@ function App() {
 
   const handleLogout = async () => {
     setMobileMenuOpen(false)
-    setMoreOpen(false)
+    // Borra los datos guardados para usar sin cobertura (por si el móvil es compartido)
+    try { if ('caches' in window) await caches.delete('supabase-api') } catch { /* nada */ }
     await supabase.auth.signOut()
   }
 
@@ -147,6 +202,8 @@ function App() {
       onDataChange,
       darkMode,
       toggleDarkMode,
+      modoCampo,
+      toggleModoCampo,
       userEmail: session.user?.email,
       onLogout: handleLogout,
       onNavigate: (page, fincaId) => {
@@ -167,6 +224,8 @@ function App() {
         return <CosechasPage {...pageProps} />
       case 'gastos':
         return <GastosPage {...pageProps} />
+      case 'facturas':
+        return <FacturasPage {...pageProps} />
       case 'ingresos':
         return <IngresosPage {...pageProps} />
       case 'finanzas':
@@ -189,6 +248,20 @@ function App() {
         return <InformesPage {...pageProps} />
       case 'amortizaciones':
         return <AmortizacionesPage {...pageProps} />
+      case 'expedientes':
+        return <ExpedientesPage {...pageProps} />
+      case 'vencimientos':
+        return <VencimientosPage {...pageProps} />
+      case 'cuaderno':
+        return <CuadernoPage {...pageProps} />
+      case 'jornadas':
+        return <JornadasPage {...pageProps} />
+      case 'apuntar':
+        return <ApuntarPage {...pageProps} />
+      case 'notas':
+        return <NotasPage {...pageProps} />
+      case 'gestoria':
+        return <GestoriaPage {...pageProps} />
       default:
         return <Dashboard {...pageProps} />
     }
@@ -212,6 +285,8 @@ function App() {
         setMobileMenuOpen={setMobileMenuOpen}
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
+        modoCampo={modoCampo}
+        toggleModoCampo={toggleModoCampo}
         userEmail={session.user?.email}
         onLogout={handleLogout}
       />
@@ -221,11 +296,16 @@ function App() {
         setCurrentPage={setCurrentPage}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
-        darkMode={darkMode}
-        toggleDarkMode={toggleDarkMode}
       />
 
       <main className="main-content">
+        <SectionTabs currentPage={currentPage} setCurrentPage={setCurrentPage} />
+        {sinConexion && (
+          <div className="alert alert-info" role="status">
+            Sin cobertura: usando los datos guardados en el móvil ({new Date(sinConexion).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}). Puedes seguir apuntando; se enviará al volver la señal.
+          </div>
+        )}
+        <AvisoInstalar />
         {!isSupabaseConfigured && (
           <div className="alert alert-error">
             Faltan variables de entorno de Supabase. Usa <code>.env</code> en local o configúralas en Vercel.
@@ -233,7 +313,7 @@ function App() {
         )}
         {error && (
           <div className="alert alert-error">
-            ⚠️ {error}
+            {error}
             <button type="button" className="btn btn-small btn-primary" style={{ marginLeft: 12 }} onClick={loadData}>
               Reintentar
             </button>
@@ -245,23 +325,19 @@ function App() {
             <p className="mt-16">Cargando datos...</p>
           </div>
         ) : (
-          renderPage()
+          <Suspense fallback={<div className="empty-state" aria-busy="true"><div className="spinner"></div></div>}>
+            {renderPage()}
+          </Suspense>
         )}
       </main>
 
-      <MoreSheet
-        open={moreOpen}
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        onClose={() => setMoreOpen(false)}
-      />
+      {currentPage !== 'apuntar' && (
+        <button type="button" className="fab-apuntar" onClick={() => setCurrentPage('apuntar')} aria-label="Apuntar jornada, tratamiento, gasto o recordatorio">
+          {getIcon('Plus', { size: 30, strokeWidth: 2.5 })}
+        </button>
+      )}
 
-      <BottomNav
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        moreOpen={moreOpen}
-        setMoreOpen={setMoreOpen}
-      />
+      <BottomNav currentPage={currentPage} setCurrentPage={setCurrentPage} />
     </div>
   )
 }

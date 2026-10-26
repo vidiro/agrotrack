@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { Inbox, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import { isMissingTable } from '../utils/fetchAll'
 
 function DestinosPage({ destinos: destinosOrig, preciosDestino: preciosOrig, onDataChange }) {
   const [destinos, setDestinos] = useState(destinosOrig || [])
@@ -31,8 +33,8 @@ function DestinosPage({ destinos: destinosOrig, preciosDestino: preciosOrig, onD
         supabase.from('destinos').select('*').order('nombre'),
         supabase.from('precios_destino').select('*')
       ])
-      if (destRes.error && !destRes.message?.includes('Could not find the table')) throw destRes.error
-      if (precRes.error && !precRes.message?.includes('Could not find the table')) throw precRes.error
+      if (destRes.error && !isMissingTable(destRes.error)) throw destRes.error
+      if (precRes.error && !isMissingTable(precRes.error)) throw precRes.error
       setDestinos(destRes.data || [])
       setPrecios(precRes.data || [])
     } catch (err) {
@@ -233,8 +235,8 @@ function DestinosPage({ destinos: destinosOrig, preciosDestino: preciosOrig, onD
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-small btn-accent" onClick={() => handleEdit(d)} aria-label={`Editar destino ${d.nombre}`}></button>
-                  <button className="btn btn-small btn-danger" onClick={() => handleDelete(d.id_destino)} aria-label={`Eliminar destino ${d.nombre}`}></button>
+                  <button className="btn btn-small btn-accent" onClick={() => handleEdit(d)} aria-label={`Editar destino ${d.nombre}`}><Pencil size={16} aria-hidden="true" /></button>
+                  <button className="btn btn-small btn-danger" onClick={() => handleDelete(d.id_destino)} aria-label={`Eliminar destino ${d.nombre}`}><Trash2 size={16} aria-hidden="true" /></button>
                 </div>
               </div>
 
@@ -320,7 +322,7 @@ function DestinosPage({ destinos: destinosOrig, preciosDestino: preciosOrig, onD
         })
       ) : (
         <div className="empty-state">
-          <div className="empty-state-icon"></div>
+          <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
           <div className="empty-state-text">No hay destinos configurados</div>
           <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: 8 }}>
             Añade bodegas, cooperativas o mercados y configura sus precios

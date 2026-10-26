@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../data/supabaseClient'
+import { fetchAll } from '../utils/fetchAll'
+import { gastosCorrientes, esGastoInversion } from '../utils/gastos'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
@@ -18,10 +20,10 @@ function FinanzasPage({ fincas, params, onDataChange }) {
     setError('')
     try {
       const [gastRes, labRes, cosechRes, ingrRes] = await Promise.all([
-        supabase.from('gastos_manual').select('*'),
-        supabase.from('labores').select('*'),
-        supabase.from('cosechas').select('*'),
-        supabase.from('ingresos').select('*')
+        fetchAll('gastos_manual'),
+        fetchAll('labores'),
+        fetchAll('cosechas'),
+        fetchAll('ingresos')
       ])
       if (gastRes.error) throw gastRes.error
       if (labRes.error) throw labRes.error
@@ -48,7 +50,8 @@ function FinanzasPage({ fincas, params, onDataChange }) {
   })
 
   const datosMes = meses.map(m => {
-    const gastosMes = gastos.filter(g => g.fecha && g.fecha.startsWith(m))
+    // Las inversiones no son coste corriente: se listan, pero no suman en los totales
+    const gastosMes = gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.startsWith(m))
     const laboresMes = labores.filter(l => l.fecha && l.fecha.startsWith(m))
     const cosechasMes = cosechas.filter(c => c.fecha && c.fecha.startsWith(m))
     
@@ -91,6 +94,8 @@ function FinanzasPage({ fincas, params, onDataChange }) {
       .reduce((s, i) => s + (i.cantidad || 0), 0)
     return sum + mesIngresos
   }, 0)
+
+  const balanceAnual = totalIngresosAnual - totalGastosAnual - totalLaboresAnual
 
   return (
     <div>
@@ -169,12 +174,12 @@ function FinanzasPage({ fincas, params, onDataChange }) {
                   <tr key={g.id_gasto}>
                     <td>{g.fecha ? format(new Date(g.fecha), 'dd/MM/yyyy') : '-'}</td>
                     <td>{g.concepto || '-'}</td>
-                    <td>{g.categoria || '-'}</td>
+                    <td>{g.categoria || '-'}{esGastoInversion(g) ? ' (no suma)' : ''}</td>
                     <td><strong>{g.importe ? `${g.importe.toFixed(2)} €` : '-'}</strong></td>
                   </tr>
                 ))}
               <tr style={{ borderTop: '2px solid var(--color-primary)' }}>
-                <td colSpan="3"><strong>TOTAL GASTOS</strong></td>
+                <td colSpan="3"><strong>TOTAL GASTOS</strong> <span style={{ fontSize: 12 }}>(sin inversiones)</span></td>
                 <td><strong>{totalGastosMes.toFixed(2)} €</strong></td>
               </tr>
             </tbody>
@@ -196,11 +201,11 @@ function FinanzasPage({ fincas, params, onDataChange }) {
           </div>
           <div className="summary-card success">
             <div className="summary-value">{totalIngresosAnual.toFixed(2)} €</div>
-            <div className="summary-label">Total ingresos anual</div>
+            <div className="summary-label">Total ingresos (últimos 12 meses)</div>
           </div>
-          <div className="summary-card danger">
-            <div className="summary-value">{(totalGastosAnual + totalLaboresAnual - totalIngresosAnual).toFixed(2)} €</div>
-            <div className="summary-label">Balance anual (gastos - ingresos)</div>
+          <div className={`summary-card ${balanceAnual >= 0 ? 'success' : 'danger'}`}>
+            <div className="summary-value">{balanceAnual >= 0 ? '+' : ''}{balanceAnual.toFixed(2)} €</div>
+            <div className="summary-label">Balance últimos 12 meses (ingresos − gastos − costes)</div>
           </div>
         </div>
       </div>

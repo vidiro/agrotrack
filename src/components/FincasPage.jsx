@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Inbox, Map as MapIcon, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import UnirFincas from './UnirFincas'
 
 function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
   const [fincas, setFincas] = useState(fincasOrig)
@@ -12,6 +14,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('nombre')
   const [sortDir, setSortDir] = useState('asc')
+  const [uniendo, setUniendo] = useState(false)
 
   const [form, setForm] = useState({
     id_finca: '',
@@ -142,6 +145,15 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
     }
   }
 
+  // Visor SIGPAC: se abre y se copia «municipio · pol. X · parc. Y» para buscarla allí
+  const abrirSigpac = async (f) => {
+    const ref = [f.termino_municipal, f.poligono && `polígono ${f.poligono}`, f.parcela && `parcela ${f.parcela}`].filter(Boolean).join(' · ')
+    try { await navigator.clipboard?.writeText(ref) } catch { /* sin portapapeles */ }
+    window.open('https://sigpac.mapa.gob.es/fega/visor/', '_blank', 'noopener')
+    setSuccess(`Referencia copiada: ${ref}. Pégala en el buscador del visor.`)
+    setTimeout(() => setSuccess(''), 6000)
+  }
+
   const handleEdit = (f) => {
     setForm({
       id_finca: f.id_finca,
@@ -225,7 +237,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
       {/* Barra de búsqueda y filtros */}
       <div className="fincas-toolbar">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -235,7 +247,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
             aria-label="Buscar fincas"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <div className="sort-buttons">
@@ -254,7 +266,24 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
           {showForm ? ' Cancelar' : '+ Nueva Finca'}
         </button>
+        <button type="button" className="btn btn-accent" onClick={() => setUniendo(!uniendo)}>
+          {uniendo ? 'Cerrar unir fincas' : 'Unir fincas'}
+        </button>
       </div>
+
+      {uniendo && (
+        <UnirFincas
+          fincas={fincas}
+          onCancelar={() => setUniendo(false)}
+          onHecho={async (msg) => {
+            setUniendo(false)
+            setSuccess(msg)
+            setTimeout(() => setSuccess(''), 6000)
+            await loadFincas()
+            onDataChange?.()
+          }}
+        />
+      )}
 
       {/* Formulario de nueva/editar finca */}
       {showForm && (
@@ -345,15 +374,20 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               </div>
               {f.notas && <p className="finca-card-notes">{f.notas}</p>}
               <div className="finca-card-actions">
-                <button className="btn btn-small" onClick={() => onNavigate?.('finca_detalle', f.id_finca)} style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }} aria-label={`Ver detalle ${f.nombre}`}> Detalle</button>
-                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)} aria-label={`Editar finca ${f.nombre}`}> Editar</button>
-                <button className="btn btn-small btn-danger" onClick={() => handleDelete(f.id_finca)} aria-label={`Eliminar finca ${f.nombre}`}></button>
+                <button className="btn btn-small" onClick={() => onNavigate?.('finca_detalle', f.id_finca)} style={{ background: 'var(--color-bg)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }} aria-label={`Ver detalle ${f.nombre}`}>Detalle</button>
+                {f.poligono && (
+                  <button className="btn btn-small" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} onClick={() => abrirSigpac(f)} title="Abre el visor SIGPAC y copia la referencia de la parcela" aria-label={`Ver ${f.nombre} en el visor SIGPAC`}>
+                    <MapIcon size={14} aria-hidden="true" /> SIGPAC
+                  </button>
+                )}
+                <button className="btn btn-small btn-accent" onClick={() => handleEdit(f)} aria-label={`Editar finca ${f.nombre}`}>Editar</button>
+                <button className="btn btn-small btn-danger" onClick={() => handleDelete(f.id_finca)} aria-label={`Eliminar finca ${f.nombre}`}><Trash2 size={16} aria-hidden="true" /></button>
               </div>
             </div>
           ))
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontraron fincas con esa búsqueda' : 'No hay fincas registradas'}
             </div>

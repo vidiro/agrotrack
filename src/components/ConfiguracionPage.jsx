@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
+import { Inbox } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import AjustesExtra from './AjustesExtra'
+import CampanasAnio from './CampanasAnio'
 
-function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogout }) {
+function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogout, modoCampo, toggleModoCampo }) {
   const [params, setParams] = useState(paramsOrig)
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState('')
@@ -70,7 +73,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
       )}
 
       <div className="card">
-        <div className="card-title">👤 Sesión</div>
+        <div className="card-title">Sesión</div>
         <p className="text-muted text-sm mb-16">
           Conectado como <strong>{userEmail || 'usuario'}</strong>
         </p>
@@ -78,6 +81,8 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
           Cerrar sesión
         </button>
       </div>
+
+      <AjustesExtra modoCampo={modoCampo} toggleModoCampo={toggleModoCampo} />
 
       <div className="card">
         <div className="card-title"> Parámetros de configuración</div>
@@ -90,10 +95,10 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
           const etiquetas = {
             'precio_gasoil_l': ' Precio gasoil (€/L)',
             'precio_uva_kilogrado': ' Precio uva (€/kilogrado)',
-            'precio_manzanilla_kg': '🫒 Precio Manzanilla (€/kg)',
-            'precio_carrasquena_kg': '🫒 Precio Carrasqueña (€/kg)',
-            'precio_basta_kg': '🫒 Precio aceituna basta (€/kg)',
-            'precio_perdigon_kg': '🫒 Precio pérdigon (€/kg)',
+            'precio_manzanilla_kg': 'Precio Manzanilla (€/kg)',
+            'precio_carrasquena_kg': 'Precio Carrasqueña (€/kg)',
+            'precio_basta_kg': 'Precio aceituna basta (€/kg)',
+            'precio_perdigon_kg': 'Precio pérdigon (€/kg)',
             'campana_mes_inicio': ' Mes inicio campaña',
             'campana_dia_inicio': ' Día inicio campaña'
           }
@@ -189,7 +194,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
                 <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                    Período de Campaña
                 </div>
-                <p className="text-muted text-sm mb-16">Define cuándo empieza y termina la campaña agrícola. La campaña del año X va desde esta fecha del año anterior hasta esta fecha del año X.</p>
+                <p className="text-muted text-sm mb-16">Día y mes en que suele empezar la campaña. La campaña del año X empieza el año anterior. Si un año empieza otro día, ponlo abajo en «Inicio de cada campaña».</p>
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Mes de inicio de campaña</label>
@@ -258,13 +263,15 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
                   </div>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                   Ejemplo: 15 sept → La campaña 2025 va del 15 sept 2024 al 15 sept 2025
+                   Ejemplo: 15 sept → la campaña 2025 va del 15 sept 2024 al 14 sept 2025
                 </div>
               </div>
 
+              <CampanasAnio params={params} onGuardado={async () => { await loadParams(); onDataChange?.(); setSuccess('Fecha de campaña guardada'); setTimeout(() => setSuccess(''), 3000) }} />
+
               {params.length === 0 && (
                 <div className="empty-state">
-                  <div className="empty-state-icon"></div>
+                  <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
                   <div className="empty-state-text">No hay parámetros configurados</div>
                 </div>
               )}
@@ -279,7 +286,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
           <table className="data-table">
             <tbody>
               <tr><td><strong>Nombre</strong></td><td>AGROtrack</td></tr>
-              <tr><td><strong>Versión</strong></td><td>1.3.0</td></tr>
+              <tr><td><strong>Versión</strong></td><td>1.8.0</td></tr>
               <tr><td><strong>Tecnología</strong></td><td>React + Vite + Supabase</td></tr>
               <tr><td><strong>Soporte</strong></td><td>iPhone (Safari), iPad, Ordenador</td></tr>
               <tr><td><strong>Base de datos</strong></td><td>Supabase (PostgreSQL)</td></tr>

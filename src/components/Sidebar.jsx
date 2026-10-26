@@ -1,41 +1,53 @@
-import { ALL_NAV } from '../data/nav'
+import { SECCIONES, PAGES } from '../data/nav'
 import { getIcon } from '../utils/lucideIcons'
 
-function Sidebar({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen, darkMode, toggleDarkMode, userEmail, onLogout }) {
+function Sidebar({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen, darkMode, toggleDarkMode, modoCampo, toggleModoCampo, userEmail, onLogout }) {
+  const ir = (id) => {
+    setCurrentPage(id)
+    setMobileMenuOpen(false)
+  }
+
+  const boton = (id) => (
+    <li key={id}>
+      <button
+        type="button"
+        className={`nav-item ${currentPage === id ? 'active' : ''}`}
+        onClick={() => ir(id)}
+        aria-current={currentPage === id ? 'page' : undefined}
+      >
+        <span className="nav-icon" aria-hidden="true">{getIcon(PAGES[id].icon, { size: 20, strokeWidth: 2 })}</span>
+        <span>{PAGES[id].label}</span>
+      </button>
+    </li>
+  )
+
   return (
-    <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+    <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`} aria-label="Menú">
       <div className="sidebar-header">
         <h1>{getIcon('Tractor', { size: 24 })} AGROtrack</h1>
-        <p>Gestión Agrícola</p>
+        <p>El papeleo del campo, hecho</p>
       </div>
-      <ul className="nav-menu">
-        {ALL_NAV.map(item => (
-          <li key={item.id}>
-            <button
-              type="button"
-              className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-              onClick={() => {
-                setCurrentPage(item.id)
-                setMobileMenuOpen(false)
-              }}
-              aria-label={item.label}
-            >
-              <span className="nav-icon">{getIcon(item.icon, { size: 20, strokeWidth: 2 })}</span>
-              <span>{item.label}</span>
-            </button>
-          </li>
+      <nav className="nav-menu">
+        {SECCIONES.map(sec => (
+          <div key={sec.id} className="nav-grupo">
+            {sec.id !== 'inicio' && <div className="nav-grupo-titulo">{sec.label}</div>}
+            <ul>{sec.pages.map(boton)}</ul>
+          </div>
         ))}
-      </ul>
+      </nav>
       <div className="sidebar-footer">
-        <button type="button" className="nav-item" onClick={toggleDarkMode} aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}>
-          <span className="nav-icon">{getIcon(darkMode ? 'Sun' : 'Moon', { size: 20, strokeWidth: 2 })}</span>
+        <ul>{boton('configuracion')}</ul>
+        <button type="button" className="nav-item" onClick={toggleModoCampo} aria-pressed={modoCampo}>
+          <span className="nav-icon" aria-hidden="true">{getIcon('Contrast', { size: 20, strokeWidth: 2 })}</span>
+          <span>{modoCampo ? 'Modo campo: activado' : 'Modo campo (al sol)'}</span>
+        </button>
+        <button type="button" className="nav-item" onClick={toggleDarkMode}>
+          <span className="nav-icon" aria-hidden="true">{getIcon(darkMode ? 'Sun' : 'Moon', { size: 20, strokeWidth: 2 })}</span>
           <span>{darkMode ? 'Modo claro' : 'Modo oscuro'}</span>
         </button>
-        {userEmail && (
-          <p className="sidebar-user" title={userEmail}>{userEmail}</p>
-        )}
-        <button type="button" className="nav-item" onClick={onLogout} aria-label="Cerrar sesión">
-          <span className="nav-icon">{getIcon('LogOut', { size: 20, strokeWidth: 2 })}</span>
+        {userEmail && <p className="sidebar-user" title={userEmail}>{userEmail}</p>}
+        <button type="button" className="nav-item" onClick={onLogout}>
+          <span className="nav-icon" aria-hidden="true">{getIcon('LogOut', { size: 20, strokeWidth: 2 })}</span>
           <span>Cerrar sesión</span>
         </button>
       </div>

@@ -1,9 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { downloadCSV } from '../utils/csvExport'
 import { getParamValue } from '../utils/params'
+import { fetchAll } from '../utils/fetchAll'
+import { insertarConCola } from '../utils/offline'
+import { parseSecciones, laborIncluyeFinca } from '../utils/labores'
 
 function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   const [labores, setLabores] = useState([])
@@ -20,32 +24,29 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   // Precio del gasoil desde params
   const precioGasoilL = getParamValue(params, ['precio_gasoil_l', 'coste_gasoleo'], 0)
 
-  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Vendimia', 'Cogida de aceitunas', 'Otros']
+  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Tratamiento fitosanitario', 'Vendimia', 'Cogida de aceitunas', 'Otros']
 
   // Formulario: una jornada con múltiples secciones
-  const [form, setForm] = useState({
+  // secciones: [{ tipo_trabajo, fincas: [{ id_finca, peones: [{ id_operario, horas }] }], maquinaria: [{ id_equipo, horas }], include_gasoil }]
+  const emptyForm = () => ({
     fecha: format(new Date(), 'yyyy-MM-dd'),
-    secciones: [], // [{ tipo_trabajo, fincas: [{ id_finca, peones: [{ id_operario, horas }] }], maquinaria: [{ id_equipo, horas }], include_gasoil }]
+    secciones: [{ tipo_trabajo: '', fincas: [], maquinaria: [], include_gasoil: true }],
     notas: ''
   })
+  const [form, setForm] = useState(emptyForm)
 
   useEffect(() => {
     loadLabores()
-  }, [filterFinca])
+  }, [])
 
   const loadLabores = async () => {
     setLoading(true)
     setError('')
     try {
-      if (filterFinca) {
-        const { data, error: err } = await supabase.from('labores').select('*').eq('id_finca', filterFinca).order('fecha', { ascending: false })
-        if (err) throw err
-        setLabores(data || [])
-      } else {
-        const { data, error: err } = await supabase.from('labores').select('*').order('fecha', { ascending: false })
-        if (err) throw err
-        setLabores(data || [])
-      }
+      // Se cargan todas: el filtro por finca se hace en cliente porque una jornada puede tener varias fincas
+      const { data, error: err } = await fetchAll('labores', q => q.order('fecha', { ascending: false }))
+      if (err) throw err
+      setLabores(data || [])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -55,36 +56,6 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
 
   // Helper para comparar IDs (texto o número)
   const idEq = (a, b) => String(a) === String(b)
-
-  // === PARSEAR LABORES (legacy → secciones) ===
-  const parseSecciones = (labor) => {
-    // Si ya tiene secciones en asignaciones_fincas (nuevo formato)
-    const raw = labor.asignaciones_fincas
-    if (raw) {
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-      // Si es un array donde el primer elemento tiene 'tipo_trabajo', es formato secciones
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].tipo_trabajo !== undefined) {
-        return parsed
-      }
-      // Si es formato legacy (array de fincas sin tipo_trabajo)
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id_finca !== undefined) {
-        const maqData = labor.asignaciones_maquinaria ? (typeof labor.asignaciones_maquinaria === 'string' ? JSON.parse(labor.asignaciones_maquinaria) : labor.asignaciones_maquinaria) : []
-        return [{
-          tipo_trabajo: labor.tipo_trabajo || '',
-          fincas: parsed,
-          maquinaria: Array.isArray(maqData) ? maqData : [],
-          include_gasoil: labor.include_gasoil !== false
-        }]
-      }
-    }
-    // Sin asignaciones_fincas → labor antigua sin secciones
-    return [{
-      tipo_trabajo: labor.tipo_trabajo || '',
-      fincas: [],
-      maquinaria: [],
-      include_gasoil: labor.include_gasoil !== false
-    }]
-  }
 
   // === CÁLCULO DE COSTES POR SECCIÓN ===
   const calcularCostesSeccion = (seccion) => {
@@ -270,8 +241,13 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     setError('')
     setSuccess('')
 
-    // Validar: al menos una sección con contenido
-    const hasContent = form.secciones.some(sec => {
+    if (form.secciones.length === 0) {
+      setError('Añade al menos una sección de trabajo')
+      return
+    }
+
+    // Validar: cada sección con al menos un peón o una máquina con horas
+    const hasContent = form.secciones.every(sec => {
       const hasPeones = sec.fincas?.some(f => f.peones?.some(p => p.id_operario && parseFloat(p.horas) > 0)) ?? false
       const hasMaq = sec.maquinaria?.some(m => parseFloat(m.horas) > 0) ?? false
       return hasPeones || hasMaq
@@ -317,9 +293,9 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
         if (err) throw new Error(err.message)
         setSuccess('Labor actualizada correctamente')
       } else {
-        const { error: err } = await supabase.from('labores').insert([datos])
+        const { error: err, encolado } = await insertarConCola('labores', datos)
         if (err) throw new Error(err.message)
-        setSuccess('Labor registrada correctamente')
+        setSuccess(encolado ? 'Sin cobertura: la jornada se enviará al recuperar la señal' : 'Labor registrada correctamente')
       }
 
       await loadLabores()
@@ -334,11 +310,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   }
 
   const resetForm = () => {
-    setForm({
-      fecha: format(new Date(), 'yyyy-MM-dd'),
-      secciones: [{ tipo_trabajo: '', fincas: [], maquinaria: [], include_gasoil: true }],
-      notas: ''
-    })
+    setForm(emptyForm())
     setEditingId(null)
     setShowForm(false)
   }
@@ -348,7 +320,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     const secciones = parseSecciones(labor)
 
     setForm({
-      fecha: labor.fecha ? format(new Date(labor.fecha), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+      fecha: labor.fecha ? labor.fecha.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'),
       secciones,
       notas: labor.notas || ''
     })
@@ -425,14 +397,9 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   const filteredLabores = useMemo(() => {
     let result = labores
     if (filterFinca) {
-      result = result.filter(l => {
-        if (idEq(l.id_finca, filterFinca)) return true
-        const secciones = getSeccionesInfo(l)
-        const allFincas = secciones.flatMap(s => s.fincas || [])
-        return allFincas.some(f => idEq(f.id_finca, filterFinca))
-      })
+      result = result.filter(l => laborIncluyeFinca(l, filterFinca))
     }
-    result = result.filter(l => l.fecha && l.fecha.startsWith(filterMonth))
+    if (filterMonth) result = result.filter(l => l.fecha && l.fecha.startsWith(filterMonth))
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase()
       result = result.filter(l => {
@@ -445,6 +412,13 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
     }
     return result
   }, [labores, filterFinca, filterMonth, searchTerm])
+
+  // Meses con labores registradas (más el actual), del más reciente al más antiguo
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set([format(new Date(), 'yyyy-MM')])
+    for (const l of labores) if (l.fecha) set.add(l.fecha.substring(0, 7))
+    return [...set].sort().reverse()
+  }, [labores])
 
   if (loading) {
     return (
@@ -468,9 +442,9 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
       {/* Filtros y Exportar */}
       <div className="fincas-toolbar mb-16" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input type="text" className="search-input" placeholder="Buscar por finca, peón, máquina..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} aria-label="Buscar labores" />
-          {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>}
+          {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>}
         </div>
         <button className="btn btn-small btn-accent" onClick={() => {
           const headers = ['fecha', 'tipo_trabajo', 'fincas', 'peones', 'maquinaria', 'coste_total', 'notas']
@@ -490,12 +464,10 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
           {fincas.map(f => <option key={f.id_finca} value={f.id_finca}>{f.nombre}</option>)}
         </select>
         <select className="form-select" style={{ width: 'auto' }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)} aria-label="Filtrar por mes">
-          {Array.from({ length: 12 }, (_, i) => {
-            const d = new Date(); d.setMonth(d.getMonth() - i)
-            return format(d, 'yyyy-MM')
-          }).map(m => <option key={m} value={m}>{format(new Date(m + '-01'), 'MMMM yyyy', { locale: es })}</option>)}
+          <option value="">Todos los meses</option>
+          {mesesDisponibles.map(m => <option key={m} value={m}>{format(new Date(m + '-01T00:00:00'), 'MMMM yyyy', { locale: es })}</option>)}
         </select>
-        <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
+        <button className="btn btn-primary" onClick={() => { if (showForm) { resetForm() } else { setForm(emptyForm()); setEditingId(null); setShowForm(true) } }}>
           {showForm ? ' Cancelar' : '+ Nueva Labor'}
         </button>
       </div>
@@ -551,7 +523,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
                         <div key={fincaAsign.id_finca} style={{ background: 'var(--color-card-bg)', borderRadius: 12, padding: 12, marginBottom: 8, border: '1px solid var(--color-border)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <strong style={{ color: 'var(--color-primary)', fontSize: 14 }}> {finca?.nombre || 'Finca'}</strong>
-                            <button type="button" className="btn btn-small btn-danger" onClick={() => removeFincaFromSection(secIdx, fincaAsign.id_finca)}></button>
+                            <button type="button" className="btn btn-small btn-danger" onClick={() => removeFincaFromSection(secIdx, fincaAsign.id_finca)} aria-label="Quitar finca"><X size={16} aria-hidden="true" /></button>
                           </div>
 
                           {fincaAsign.peones.map((peon, pIdx) => (
@@ -561,7 +533,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
                                 {personal.map(p => <option key={p.id_operario} value={p.id_operario}>{p.nombre} ({p.coste_h}€/h)</option>)}
                               </select>
                               <input type="number" className="form-input" style={{ flex: 1, maxWidth: 90 }} value={peon.horas} onChange={e => updatePeonInFincaInSection(secIdx, fincaAsign.id_finca, pIdx, 'horas', e.target.value)} step="0.5" min="0" placeholder="Horas" />
-                              <button type="button" className="btn btn-small btn-danger" onClick={() => removePeonFromFincaInSection(secIdx, fincaAsign.id_finca, pIdx)}></button>
+                              <button type="button" className="btn btn-small btn-danger" onClick={() => removePeonFromFincaInSection(secIdx, fincaAsign.id_finca, pIdx)} aria-label="Quitar peón"><X size={16} aria-hidden="true" /></button>
                             </div>
                           ))}
 
@@ -593,7 +565,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
                             {equipo ? `${equipo.tipo} (${equipo.marca_modelo || 'Sin marca'})` : 'Equipo'}
                           </span>
                           <input type="number" className="form-input" style={{ flex: 1, maxWidth: 90 }} value={maqAsign.horas} onChange={e => updateMaquinaHorasInSection(secIdx, maqAsign.id_equipo, e.target.value)} step="0.5" min="0" placeholder="Horas" />
-                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeMaquinaFromSection(secIdx, maqAsign.id_equipo)}></button>
+                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeMaquinaFromSection(secIdx, maqAsign.id_equipo)} aria-label="Quitar máquina"><X size={16} aria-hidden="true" /></button>
                         </div>
                       )
                     })}
@@ -670,8 +642,8 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
                       <td style={{ fontSize: 13 }}>{getFincaInfo(l)}</td>
                       <td><strong>{(l.coste_total || 0).toFixed(2)} €</strong></td>
                       <td>
-                        <button className="btn btn-small btn-accent" onClick={() => handleEdit(l)} aria-label={`Editar labor`}></button>
-                        <button className="btn btn-small btn-danger" onClick={() => handleDelete(l.id_labor)} aria-label={`Eliminar labor`}></button>
+                        <button className="btn btn-small btn-accent" onClick={() => handleEdit(l)} aria-label={`Editar labor`}><Pencil size={16} aria-hidden="true" /></button>
+                        <button className="btn btn-small btn-danger" onClick={() => handleDelete(l.id_labor)} aria-label={`Eliminar labor`}><Trash2 size={16} aria-hidden="true" /></button>
                       </td>
                     </tr>
                   )
@@ -680,7 +652,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
             </table>
           </div>
         ) : (
-          <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">No hay labores para este filtro</div></div>
+          <div className="empty-state"><div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div><div className="empty-state-text">No hay labores para este filtro</div></div>
         )}
       </div>
     </div>

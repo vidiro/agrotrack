@@ -1,10 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../data/supabaseClient'
+import { Inbox } from 'lucide-react'
+import { fetchAll } from '../utils/fetchAll'
+import { gastosCorrientes, gastosInversion, esGastoInversion } from '../utils/gastos'
+import { laborIncluyeFinca, repartoLabor } from '../utils/labores'
+import { getParamValue } from '../utils/params'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
+import { useRecuperacion } from '../utils/useRecuperacion'
+import RecuperacionInversion from './RecuperacionInversion'
 
-function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaForDetail, onNavigate }) {
+function FincaDetailPage({ fincas, personal, maquinaria, params, destinos, preciosDestino, amortizaciones, selectedFincaForDetail, onNavigate }) {
   const [selectedFinca, setSelectedFinca] = useState(selectedFincaForDetail || '')
   const [filterMonth, setFilterMonth] = useState('') // vacío = todo
   const [loading, setLoading] = useState(false)
@@ -25,6 +31,10 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
 
   const fincaSeleccionada = fincas.find(f => f.id_finca === selectedFinca)
 
+  // Recuperación de la inversión (histórico completo, independiente del filtro de mes)
+  const recuperacion = useRecuperacion({ fincas, amortizaciones, params, destinos, preciosDestino, personal, maquinaria })
+  const recFinca = recuperacion.resultados.find(r => String(r.id_finca) === String(selectedFinca))
+
   // Cargar datos al seleccionar finca o mes
   useEffect(() => {
     if (!selectedFinca) return
@@ -35,32 +45,28 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
     setLoading(true)
     setError('')
     try {
-      const monthFilter = filterMonth ? `.gte('fecha', ${filterMonth}-01).lte('fecha', ${filterMonth}-31)` : ''
+      // Rango del mes completo (antes se cortaba en el día 28)
+      const monthRange = (q) => {
+        if (!filterMonth) return q
+        const [y, m] = filterMonth.split('-').map(Number)
+        const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+        return q.gte('fecha', `${filterMonth}-01`).lt('fecha', next)
+      }
 
-      // Labores de la finca
-      let labQuery = supabase.from('labores').select('*').eq('id_finca', selectedFinca).order('fecha', { ascending: false })
-      if (filterMonth) labQuery = labQuery.gte('fecha', filterMonth + '-01').lte('fecha', filterMonth + '-28')
-      const labRes = await labQuery
+      const [labRes, appRes, cosRes, gasRes] = await Promise.all([
+        // Labores: se filtran en cliente porque una jornada puede incluir varias fincas
+        fetchAll('labores', q => monthRange(q).order('fecha', { ascending: false })),
+        fetchAll('aplicaciones'),
+        fetchAll('cosechas', q => monthRange(q.eq('id_finca', selectedFinca)).order('fecha', { ascending: false })),
+        fetchAll('gastos_manual', q => monthRange(q.eq('id_finca', selectedFinca)).order('fecha', { ascending: false })),
+      ])
+      for (const r of [labRes, appRes, cosRes, gasRes]) if (r.error) throw r.error
 
-      // Aplicaciones (vía labores de la finca)
-      let appQuery = supabase.from('aplicaciones').select('*, labores(id_finca)').order('creado_en', { ascending: false })
-      const appRes = await appQuery
+      const laboresFinca = (labRes.data || []).filter(l => laborIncluyeFinca(l, selectedFinca))
+      const idsLabores = new Set(laboresFinca.map(l => String(l.id_labor)))
 
-      // Cosechas de la finca
-      let cosQuery = supabase.from('cosechas').select('*').eq('id_finca', selectedFinca).order('fecha', { ascending: false })
-      if (filterMonth) cosQuery = cosQuery.gte('fecha', filterMonth + '-01').lte('fecha', filterMonth + '-28')
-      const cosRes = await cosQuery
-
-      // Gastos asociados a la finca
-      let gasQuery = supabase.from('gastos_manual').select('*').eq('id_finca', selectedFinca).order('fecha', { ascending: false })
-      if (filterMonth) gasQuery = gasQuery.gte('fecha', filterMonth + '-01').lte('fecha', filterMonth + '-28')
-      const gasRes = await gasQuery
-
-      if (labRes.error) throw labRes.error
-
-      setLabores(labRes.data || [])
-      // Filtrar aplicaciones por la finca seleccionada
-      setAplicaciones((appRes.data || []).filter(a => a.labores?.id_finca === selectedFinca))
+      setLabores(laboresFinca)
+      setAplicaciones((appRes.data || []).filter(a => idsLabores.has(String(a.id_labor))))
       setCosechas(cosRes.data || [])
       setGastos(gasRes.data || [])
     } catch (err) {
@@ -70,18 +76,32 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
     }
   }
 
+  // Horas y coste de una labor imputables a esta finca
+  // Solo lo que se hizo en ESTA finca: sus tipos de trabajo, sus horas y su parte del coste
+  const ctxReparto = { personal, maquinaria, precioGasoil: getParamValue(params, ['precio_gasoil_l', 'coste_gasoleo'], 0) }
+  const laborEnFinca = (l) => {
+    const r = repartoLabor(l, ctxReparto).get(String(selectedFinca))
+    if (!r) return { horas: 0, coste: 0, tipos: [] }
+    return { horas: r.horasPeones + r.horasMaq, coste: r.total, tipos: r.tipos }
+  }
+
   // === CÁLCULOS ===
   const stats = useMemo(() => {
-    const totalHoras = labores.reduce((s, l) => s + (l.h_maquinaria || 0) + (l.hh_persona || 0), 0)
-    const totalCoste = labores.reduce((s, l) => s + (l.coste_total || 0), 0)
-    const totalProduccion = cosechas.reduce((s, c) => s + (c.kg || 0), 0)
+    const porLabor = labores.map(laborEnFinca)
+    const totalHoras = porLabor.reduce((s, x) => s + x.horas, 0)
+    const totalCoste = porLabor.reduce((s, x) => s + x.coste, 0)
+    const totalProduccion = cosechas.reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
     const totalKilogrados = cosechas.reduce((s, c) => s + (cosechaKilogrados(c) || 0), 0)
     const totalAceite = cosechas.reduce((s, c) => s + (cosechaAceite(c) || 0), 0)
-    const totalGastos = gastos.reduce((s, g) => s + (g.importe || 0), 0)
+    const totalGastos = gastosCorrientes(gastos).reduce((s, g) => s + (g.importe || 0), 0)
+    const totalInversionGastos = gastosInversion(gastos).reduce((s, g) => s + (g.importe || 0), 0)
     const numAplicaciones = aplicaciones.length
 
-    return { totalHoras, totalCoste, totalProduccion, totalKilogrados, totalAceite, totalGastos, numAplicaciones, numLabores: labores.length, numCosechas: cosechas.length }
-  }, [labores, aplicaciones, cosechas, gastos])
+    return { totalHoras, totalCoste, totalProduccion, totalKilogrados, totalAceite, totalGastos, totalInversionGastos, numAplicaciones, numLabores: labores.length, numCosechas: cosechas.length }
+  }, [labores, aplicaciones, cosechas, gastos, selectedFinca])
+
+  // «10» → «Pol. 10», pero «Polígono 10» se deja como está (no «Pol. Polígono 10»)
+  const conPrefijo = (v, prefijo, ya) => (v ? (ya.test(String(v)) ? String(v) : `${prefijo} ${v}`) : '')
 
   return (
     <div>
@@ -109,7 +129,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
 
       {!selectedFinca ? (
         <div className="empty-state">
-          <div className="empty-state-icon"></div>
+          <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
           <div className="empty-state-text">Selecciona una finca para ver su detalle</div>
         </div>
       ) : loading ? (
@@ -122,15 +142,19 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
           {error && <div className="alert alert-error"> {error}</div>}
 
           {/* Cabecera con nombre de finca */}
-          <div className="card mb-16" style={{ background: 'var(--color-primary-light)', borderColor: 'var(--color-primary)' }}>
+          <div className="card mb-16" style={{ borderColor: 'var(--color-primary)', borderWidth: 2 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem' }}> {fincaSeleccionada?.nombre}</h2>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-primary)' }}>{fincaSeleccionada?.nombre}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
                   {fincaSeleccionada?.cultivo} {fincaSeleccionada?.variedad && `· ${fincaSeleccionada.variedad}`} {fincaSeleccionada?.superficie_total_ha && `· ${fincaSeleccionada.superficie_total_ha} ha`} {fincaSeleccionada?.termino_municipal && `· ${fincaSeleccionada.termino_municipal}`}
                 </div>
               </div>
-              {fincaSeleccionada?.poligono && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Pol. {fincaSeleccionada.poligono} / Parc. {fincaSeleccionada.parcela}</div>}
+              {(fincaSeleccionada?.poligono || fincaSeleccionada?.parcela) && (
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                  {[conPrefijo(fincaSeleccionada.poligono, 'Pol.', /pol/i), conPrefijo(fincaSeleccionada.parcela, 'Parc.', /parc/i)].filter(Boolean).join(' · ')}
+                </div>
+              )}
             </div>
           </div>
 
@@ -169,16 +193,34 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
             <div className="summary-card danger">
               <div className="summary-value">{stats.totalGastos.toFixed(0)} €</div>
               <div className="summary-label">Gastos asociados</div>
+              {stats.totalInversionGastos > 0 && <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>+ {stats.totalInversionGastos.toFixed(0)} € de inversión (no suma)</div>}
             </div>
             <div className="summary-card accent">
               <div className="summary-value">{(stats.totalCoste + stats.totalGastos).toFixed(0)} €</div>
-              <div className="summary-label">Total inversión</div>
+              <div className="summary-label">Total costes</div>
             </div>
             <div className="summary-card">
               <div className="summary-value">{stats.numCosechas}</div>
               <div className="summary-label">Cosechas</div>
             </div>
           </div>
+
+          {/* Recuperación de la inversión */}
+          {recFinca ? (
+            <RecuperacionInversion r={recFinca} />
+          ) : recuperacion.cargando ? (
+            <div className="card"><div className="card-title">Recuperación de la inversión</div><p className="mt-16">Calculando…</p></div>
+          ) : recuperacion.error ? (
+            <div className="alert alert-error">No se pudo calcular la recuperación: {recuperacion.error}</div>
+          ) : (
+            <div className="card">
+              <div className="card-title">Recuperación de la inversión</div>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 12px' }}>
+                Registra lo que pagaste por esta finca (terreno, plantación, riego…) en Inversiones y aquí verás cuánto llevas recuperado y cuándo se paga.
+              </p>
+              <button type="button" className="btn btn-small btn-primary" onClick={() => onNavigate?.('amortizaciones')}>Ir a Inversiones</button>
+            </div>
+          )}
 
           {/* Sección: Labores */}
           <div className="card">
@@ -190,19 +232,22 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                     <tr><th>Fecha</th><th>Trabajo</th><th>Horas</th><th>Coste</th></tr>
                   </thead>
                   <tbody>
-                    {labores.slice(0, 20).map(l => (
-                      <tr key={l.id_labor}>
-                        <td>{l.fecha ? format(new Date(l.fecha), 'dd/MM/yy') : '—'}</td>
-                        <td>{l.tipo_trabajo || '—'}</td>
-                        <td>{(l.hh_persona || 0 + (l.h_maquinaria || 0)).toFixed(1)} h</td>
-                        <td>{(l.coste_total || 0).toFixed(0)} €</td>
-                      </tr>
-                    ))}
+                    {labores.slice(0, 20).map(l => {
+                      const x = laborEnFinca(l)
+                      return (
+                        <tr key={l.id_labor}>
+                          <td>{l.fecha ? format(new Date(l.fecha), 'dd/MM/yy') : '—'}</td>
+                          <td>{x.tipos.join(', ') || l.tipo_trabajo || '—'}</td>
+                          <td>{x.horas.toFixed(1)} h</td>
+                          <td>{x.coste.toFixed(0)} €</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin labores</div></div>
+              <div className="empty-state"><div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div><div className="empty-state-text">Sin labores</div></div>
             )}
           </div>
 
@@ -228,7 +273,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin aplicaciones registradas</div></div>
+              <div className="empty-state"><div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div><div className="empty-state-text">Sin aplicaciones registradas</div></div>
             )}
           </div>
 
@@ -257,7 +302,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin cosechas</div></div>
+              <div className="empty-state"><div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div><div className="empty-state-text">Sin cosechas</div></div>
             )}
           </div>
 
@@ -275,7 +320,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                       <tr key={g.id_gasto}>
                         <td>{g.fecha ? format(new Date(g.fecha), 'dd/MM/yy') : '—'}</td>
                         <td>{g.concepto || '—'}</td>
-                        <td>{g.categoria || '—'}</td>
+                        <td>{g.categoria || '—'}{esGastoInversion(g) ? ' (no suma)' : ''}</td>
                         <td>{(g.importe || 0).toFixed(2)} €</td>
                       </tr>
                     ))}
@@ -283,7 +328,7 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, selectedFincaFo
                 </table>
               </div>
             ) : (
-              <div className="empty-state"><div className="empty-state-icon"></div><div className="empty-state-text">Sin gastos asociados a esta finca</div></div>
+              <div className="empty-state"><div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div><div className="empty-state-text">Sin gastos asociados a esta finca</div></div>
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
 
 function PersonalPage({ personal: personalOrig, onDataChange }) {
@@ -151,7 +152,7 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -161,7 +162,7 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
             aria-label="Buscar operarios"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
@@ -236,8 +237,8 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
                     <td><span className="badge badge-blue">{p.categoria || 'Peón'}</span></td>
                     <td>{p.coste_h ? `${p.coste_h.toFixed(2)} €` : '-'}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(p)} aria-label={`Editar operario ${p.nombre}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(p.id_operario)} aria-label={`Eliminar operario ${p.nombre}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(p)} aria-label={`Editar operario ${p.nombre}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(p.id_operario)} aria-label={`Eliminar operario ${p.nombre}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}

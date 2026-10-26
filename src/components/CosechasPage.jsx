@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Inbox, Pencil, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../data/supabaseClient'
+import { fetchAll } from '../utils/fetchAll'
+import { insertarConCola } from '../utils/offline'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
+import { cosechaKilogrados, cosechaAceite, valorEstimadoCosecha } from '../utils/cosecha'
 
 function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }) {
   const [cosechas, setCosechas] = useState([])
@@ -33,7 +36,7 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
     setLoading(true)
     setError('')
     try {
-      const { data, error: err } = await supabase.from('cosechas').select('*').order('fecha', { ascending: false })
+      const { data, error: err } = await fetchAll('cosechas', q => q.order('fecha', { ascending: false }))
       if (err) throw err
       setCosechas(data || [])
     } catch (err) {
@@ -52,77 +55,8 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
     setForm({ ...form, [name]: value })
   }
 
-  // Helper: obtener precio desde params
-  const getParam = (clave) => {
-    if (!params || !Array.isArray(params)) return 0
-    const p = params.find(pr => pr.clave === clave)
-    return p ? (parseFloat(p.valor) || 0) : 0
-  }
-
-  // Helper: obtener precio desde precios_destino
-  const getPrecioDestino = (nombreDestino, tipoProducto) => {
-    if (!destinos || !Array.isArray(destinos) || !nombreDestino) return 0
-    // Find destino by name
-    const dest = destinos.find(d => d.nombre === nombreDestino)
-    if (!dest) return 0
-    // Find price for this destino and product type
-    const precio = (preciosDestino || []).find(p => String(p.id_destino) === String(dest.id_destino) && p.tipo_producto === tipoProducto)
-    return precio ? (parseFloat(precio.precio) || 0) : 0
-  }
-
-  // Helper: calcular ingreso previsto para una cosecha
-  const calcIngreso = (c) => {
-    try {
-      const kg = parseFloat(c.kg) || 0
-      const kgPerdigon = parseFloat(c.kg_perdigon) || 0
-      const kilogrados = cosechaKilogrados(c) || 0
-      const cult = (c.cultivo || '').toLowerCase()
-      const variedad = (c.variedad || '').toLowerCase()
-      const nombreDestino = c.destino // stored as nombre text
-      let total = 0
-
-      // Intentar precio por destino primero
-      if (nombreDestino) {
-        if (cult === 'viña' || cult === 'viña y olivar') {
-          const p = getPrecioDestino(nombreDestino, 'uva')
-          if (p > 0 && kilogrados > 0) total += kilogrados * p
-        }
-        if (cult === 'olivar' || cult === 'viña y olivar') {
-          if (kgPerdigon > 0) {
-            total += kgPerdigon * getPrecioDestino(nombreDestino, 'perdigon')
-          }
-          if (kg > 0) {
-            let tipo = 'aceituna' // fallback
-            if (variedad.includes('manzanilla')) tipo = 'manzanilla'
-            else if (variedad.includes('carrasquena') || variedad.includes('carrasqueña')) tipo = 'carrasquena'
-            total += kg * getPrecioDestino(nombreDestino, tipo)
-          }
-        }
-      }
-
-      // Si no hay precio por destino, usar precios base de params
-      if (total === 0) {
-        if (cult === 'viña' || cult === 'viña y olivar') {
-          const precio = getParam('precio_uva_kilogrado')
-          if (precio > 0 && kilogrados > 0) total += kilogrados * precio
-        }
-        if (cult === 'olivar' || cult === 'viña y olivar') {
-          if (kgPerdigon > 0) total += kgPerdigon * getParam('precio_perdigon_kg')
-          if (kg > 0) {
-            let precio = 0
-            if (variedad.includes('manzanilla')) precio = getParam('precio_manzanilla_kg')
-            else if (variedad.includes('carrasquena') || variedad.includes('carrasqueña')) precio = getParam('precio_carrasquena_kg')
-            else precio = getParam('precio_basta_kg')
-            if (precio > 0) total += kg * precio
-          }
-        }
-      }
-
-      return total
-    } catch {
-      return 0
-    }
-  }
+  // Ingreso previsto de una cosecha (precio por destino o, si no hay, precios base de Ajustes)
+  const calcIngreso = (c) => valorEstimadoCosecha(c, { params, destinos, preciosDestino })
 
   // Valor en vivo del formulario: kilogrados (viña) o aceite potencial (olivar)
   const formKilogrados = useMemo(() => {
@@ -254,9 +188,9 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
         if (err) throw new Error(err.message)
         setSuccess('Cosecha actualizada')
       } else {
-        const { error: err } = await supabase.from('cosechas').insert([datos])
+        const { error: err, encolado } = await insertarConCola('cosechas', datos)
         if (err) throw new Error(err.message)
-        setSuccess('Cosecha registrada')
+        setSuccess(encolado ? 'Sin cobertura: la cosecha se enviará al recuperar la señal' : 'Cosecha registrada')
       }
 
       await loadData()
@@ -330,7 +264,7 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
       {/* Barra de búsqueda */}
       <div className="fincas-toolbar mb-16">
         <div className="search-box">
-          <span className="search-icon"></span>
+          <span className="search-icon" aria-hidden="true"><Search size={18} /></span>
           <input
             type="text"
             className="search-input"
@@ -340,7 +274,7 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
             aria-label="Buscar cosechas"
           />
           {searchTerm && (
-            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"></button>
+            <button className="clear-search" onClick={() => setSearchTerm('')} aria-label="Limpiar búsqueda"><X size={18} aria-hidden="true" /></button>
           )}
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null) }}>
@@ -657,8 +591,8 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
                     <td>{c.brix_baume_viina ? `${c.brix_baume_viina}°` : (c.rendimiento_graso_olivar ? `${c.rendimiento_graso_olivar}%` : '-')}</td>
                     <td>{cosechaKilogrados(c) != null ? `${cosechaKilogrados(c).toFixed(0)} kg°` : (cosechaAceite(c) != null ? `${cosechaAceite(c).toFixed(0)} kg ace.` : '-')}</td>
                     <td>
-                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(c)} aria-label={`Editar cosecha ${c.variedad || c.cultivo}`}></button>
-                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(c.id_cosecha)} aria-label={`Eliminar cosecha ${c.variedad || c.cultivo}`}></button>
+                      <button className="btn btn-small btn-accent" onClick={() => handleEdit(c)} aria-label={`Editar cosecha ${c.variedad || c.cultivo}`}><Pencil size={16} aria-hidden="true" /></button>
+                      <button className="btn btn-small btn-danger" onClick={() => handleDelete(c.id_cosecha)} aria-label={`Eliminar cosecha ${c.variedad || c.cultivo}`}><Trash2 size={16} aria-hidden="true" /></button>
                     </td>
                   </tr>
                 ))}
@@ -667,7 +601,7 @@ function CosechasPage({ fincas, params, destinos, preciosDestino, onDataChange }
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon"></div>
+            <div className="empty-state-icon" aria-hidden="true"><Inbox size={40} strokeWidth={1.5} /></div>
             <div className="empty-state-text">No hay cosechas registradas</div>
           </div>
         )}

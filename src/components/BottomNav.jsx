@@ -1,38 +1,31 @@
-import { PRIMARY_NAV, MORE_NAV } from '../data/nav'
+import { SECCIONES, seccionDePagina } from '../data/nav'
 import { getIcon } from '../utils/lucideIcons'
 
-function BottomNav({ currentPage, setCurrentPage, moreOpen, setMoreOpen }) {
-  const moreActive = MORE_NAV.some(item => item.id === currentPage)
+// Recuerda la última página visitada de cada bloque para volver a ella
+const ultimaPorSeccion = {}
+
+function BottomNav({ currentPage, setCurrentPage }) {
+  const actual = seccionDePagina(currentPage)
+  if (actual) ultimaPorSeccion[actual.id] = currentPage
 
   return (
-    <nav className="bottom-nav" role="navigation" aria-label="Navegación principal">
+    <nav className="bottom-nav" aria-label="Navegación principal">
       <div className="bottom-nav-items">
-        {PRIMARY_NAV.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            className={`bottom-nav-item ${currentPage === item.id ? 'active' : ''}`}
-            onClick={() => {
-              setMoreOpen(false)
-              setCurrentPage(item.id)
-            }}
-            aria-label={item.label}
-            aria-current={currentPage === item.id ? 'page' : undefined}
-          >
-            <span className="bottom-nav-icon" aria-hidden="true">{getIcon(item.icon, { size: 20, strokeWidth: 2 })}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`bottom-nav-item ${moreActive || moreOpen ? 'active' : ''}`}
-          onClick={() => setMoreOpen(open => !open)}
-          aria-label="Más secciones"
-          aria-expanded={moreOpen}
-        >
-          <span className="bottom-nav-icon" aria-hidden="true">{getIcon('MoreHorizontal', { size: 20, strokeWidth: 2 })}</span>
-          <span>Más</span>
-        </button>
+        {SECCIONES.map(sec => {
+          const activa = actual?.id === sec.id
+          return (
+            <button
+              key={sec.id}
+              type="button"
+              className={`bottom-nav-item ${activa ? 'active' : ''}`}
+              onClick={() => setCurrentPage(activa ? sec.pages[0] : (ultimaPorSeccion[sec.id] || sec.pages[0]))}
+              aria-current={activa ? 'page' : undefined}
+            >
+              <span className="bottom-nav-icon" aria-hidden="true">{getIcon(sec.icon, { size: 22, strokeWidth: 2 })}</span>
+              <span>{sec.label}</span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { applyPlugin } from 'jspdf-autotable'
+import { esAmortizable, cuotaMensual } from './inversion'
+import { esGastoInversion } from './gastos'
 applyPlugin(jsPDF)
 
 /**
@@ -29,6 +31,7 @@ export function generateReportPDF(opts) {
     varGastos,
     varProduccion,
     periodoAnterior,
+    totalInversiones = 0,
   } = opts
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -86,14 +89,6 @@ export function generateReportPDF(opts) {
     doc.setFontSize(9)
   }
 
-  const addKeyValue = (key, value, bold = false) => {
-    if (y > 275) { doc.addPage(); y = 20 }
-    normalText()
-    doc.text(key + ':', 18, y)
-    doc.text(String(value), pageWidth - 18, y, { align: 'right' })
-    y += 6
-  }
-
   // === SUMMARY TABLE ===
   sectionTitle('Resumen General')
 
@@ -108,12 +103,20 @@ export function generateReportPDF(opts) {
   ]
 
   const balColor = totales.balance >= 0 ? GREEN : RED
-  const balLabel = totales.balance >= 0 ? '✅ Superávit' : '⚠️ Déficit'
+  let balanceRowIndex = -1
+  // Solo texto: la fuente estándar de jsPDF no incluye emojis ni flechas
+  const balLabel = totales.balance >= 0 ? 'Superávit' : 'Déficit'
+  balanceRowIndex = summaryData.length
   summaryData.push([
     'BALANCE',
     (totales.balance >= 0 ? '+' : '') + totales.balance.toFixed(2) + ' €',
     balLabel
   ])
+
+  // Inversiones: se informan, pero no restan en el balance
+  if (totalInversiones > 0) {
+    summaryData.push(['Inversiones (no restan)', totalInversiones.toFixed(2) + ' €', 'Ver detalle de gastos'])
+  }
 
   doc.autoTable({
     startY: y,
@@ -123,12 +126,12 @@ export function generateReportPDF(opts) {
     headStyles: { fillColor: GREEN, fontSize: 9 },
     bodyStyles: { fontSize: 9, cellPadding: 3 },
     columnStyles: {
-      0: { cellWidth: 60 },
-      1: { halign: 'right', cellWidth: 55 },
-      2: { halign: 'left', cellWidth: 65 },
+      0: { cellWidth: 58 },
+      1: { halign: 'right', cellWidth: 52 },
+      2: { halign: 'left', cellWidth: 64 },
     },
     didParseCell: function(data) {
-      if (data.section === 'body' && data.row.index === summaryData.length - 1) {
+      if (data.section === 'body' && data.row.index === balanceRowIndex) {
         data.cell.styles.fontStyle = 'bold'
         data.cell.styles.fillColor = totales.balance >= 0 ? [232, 245, 233] : [254, 226, 226]
         data.cell.styles.textColor = balColor
@@ -143,9 +146,9 @@ export function generateReportPDF(opts) {
   if (periodoAnterior && (periodoAnterior.ingresos > 0 || periodoAnterior.gastos > 0)) {
     sectionTitle('Variación vs Período Anterior')
     const varData = [
-      ['Ingresos', (varIngresos.positive ? '+' : '') + varIngresos.pct.toFixed(1) + '%', varIngresos.positive ? '↑ Mejor' : '↓ Peor'],
-      ['Gastos + Costes', (varGastos.positive ? '+' : '') + varGastos.pct.toFixed(1) + '%', !varGastos.positive ? '↓ Menos gasto' : '↑ Más gasto'],
-      ['Producción', (varProduccion.positive ? '+' : '') + varProduccion.pct.toFixed(1) + '%', varProduccion.positive ? '↑ Más' : '↓ Menos'],
+      ['Ingresos', (varIngresos.positive ? '+' : '') + varIngresos.pct.toFixed(1) + '%', varIngresos.positive ? 'Mejor' : 'Peor'],
+      ['Gastos + Costes', (varGastos.positive ? '+' : '') + varGastos.pct.toFixed(1) + '%', !varGastos.positive ? 'Menos gasto' : 'Más gasto'],
+      ['Producción', (varProduccion.positive ? '+' : '') + varProduccion.pct.toFixed(1) + '%', varProduccion.positive ? 'Más producción' : 'Menos producción'],
     ]
     doc.autoTable({
       startY: y,
@@ -177,14 +180,13 @@ export function generateReportPDF(opts) {
   if (gastosPorCategoria && gastosPorCategoria.length > 0) {
     sectionTitle('Distribución de Gastos por Categoría')
 
-    const maxVal = Math.max(...gastosPorCategoria.map(g => g.valor), 1)
     const totalGastosCostes = totales.totalGastos + totales.totalCostesLabores
 
     doc.autoTable({
       startY: y,
       head: [['Categoría', 'Importe', '% del total']],
       body: gastosPorCategoria.map(g => {
-        const pct = ((g.valor / totalGastosCostes) * 100).toFixed(1)
+        const pct = totalGastosCostes > 0 ? ((g.valor / totalGastosCostes) * 100).toFixed(1) : '0.0'
         return [g.nombre, g.valor.toFixed(2) + ' €', pct + '%']
       }),
       theme: 'grid',
@@ -324,30 +326,33 @@ export function generateReportPDF(opts) {
       const prodVina = produccionPorFinca?.vina?.find(pf => pf.finca === cf.finca)
       const prodOlivar = produccionPorFinca?.olivar?.find(pf => pf.finca === cf.finca)
       const prodKg = (prodVina?.kg || 0) + (prodOlivar?.kg || 0)
-      const benefit = prodKg > 0 ? '✅' : '⚠️'
-      const costeKg = prodKg > 0 ? (cf.total / prodKg).toFixed(2) : '-'
+      const gastos = cf.gastos || 0
+      const labores = cf.total - gastos
+      const costeKg = prodKg > 0 ? (cf.total / prodKg).toFixed(2) + ' €/kg' : '-'
       return [
         cf.finca,
+        labores.toFixed(2) + ' €',
+        gastos.toFixed(2) + ' €',
         cf.total.toFixed(2) + ' €',
         prodKg.toFixed(0) + ' kg',
-        costeKg + ' €/kg',
-        benefit
+        costeKg,
       ]
     })
 
     doc.autoTable({
       startY: y,
-      head: [['Finca', 'Costes totales', 'Producción', 'Coste/kg', 'Estado']],
+      head: [['Finca', 'Labores', 'Gastos', 'Total', 'Producción', 'Coste/kg']],
       body: fincaAnalysis,
       theme: 'grid',
       headStyles: { fillColor: GOLD, fontSize: 8 },
       bodyStyles: { fontSize: 8, cellPadding: 2 },
       columnStyles: {
-        0: { cellWidth: 40 },
-        1: { halign: 'right', cellWidth: 35 },
-        2: { halign: 'right', cellWidth: 30 },
-        3: { halign: 'right', cellWidth: 30 },
-        4: { halign: 'center', cellWidth: 25 },
+        0: { cellWidth: 38 },
+        1: { halign: 'right', cellWidth: 26 },
+        2: { halign: 'right', cellWidth: 26 },
+        3: { halign: 'right', cellWidth: 28 },
+        4: { halign: 'right', cellWidth: 26 },
+        5: { halign: 'right', cellWidth: 26 },
       },
       margin: { left: 18, right: 18 },
     })
@@ -356,20 +361,20 @@ export function generateReportPDF(opts) {
 
   // === AMORTIZACIONES ===
   if (amortizaciones && amortizaciones.length > 0) {
-    sectionTitle('Amortización de Activos', [230, 126, 34])
+    sectionTitle('Inversiones y Amortización', [230, 126, 34])
 
     const amortData = amortizaciones.map(a => {
-      const meses = a.meses_amortizacion || 12
-      const importe = a.importe_compra || 0
-      const residual = a.valor_residual || 0
-      const amortMensual = (importe - residual) / meses
+      const importe = parseFloat(a.importe_compra) || 0
+      const residual = parseFloat(a.valor_residual) || 0
+      const amortizable = esAmortizable(a)
+      const amortMensual = cuotaMensual(a)
       const amortAnual = amortMensual * 12
       return [
-        a.descripcion || 'Sin descripción',
-        a.finca_nombre || a.id_finca ? (fincas?.find(f => String(f.id_finca) === String(a.id_finca))?.nombre || a.finca_nombre || 'General') : 'General',
+        (a.descripcion || 'Sin descripción') + (amortizable ? '' : ' (terreno, no se amortiza)'),
+        fincas?.find(f => String(f.id_finca) === String(a.id_finca))?.nombre || a.finca_nombre || 'General',
         importe.toFixed(2) + ' €',
-        amortMensual.toFixed(2) + ' €/mes',
-        amortAnual.toFixed(2) + ' €/año',
+        amortizable ? amortMensual.toFixed(2) + ' €/mes' : '-',
+        amortizable ? amortAnual.toFixed(2) + ' €/año' : '-',
         residual.toFixed(2) + ' €',
         a.fecha_compra || '-',
       ]
@@ -428,31 +433,44 @@ export function generateReportPDF(opts) {
   // === DETALLE DE GASTOS ===
   if (gastosDetallados && gastosDetallados.length > 0) {
     if (y > 220) { doc.addPage(); y = 20 }
-    sectionTitle('Detalle de Gastos', RED)
+    sectionTitle('Detalle de Gastos y Facturas', RED)
 
+    // Con datos de factura: nº de factura, empresa y CIF (para justificar ayudas)
+    const fechaES = (f) => (f ? `${String(f).substring(8, 10)}/${String(f).substring(5, 7)}/${String(f).substring(0, 4)}` : '-')
     doc.autoTable({
       startY: y,
-      head: [['Fecha', 'Categoría', 'Concepto', 'Finca', 'Importe']],
+      head: [['Fecha', 'Nº factura', 'Empresa', 'CIF/NIF', 'Concepto', 'Finca', 'Importe']],
       body: gastosDetallados.map(g => [
-        g.fecha || '-',
-        g.categoria || '-',
-        g.concepto || '-',
+        fechaES(g.fecha),
+        g.num_factura || '-',
+        g.proveedor || '-',
+        g.nif_proveedor || '-',
+        (g.concepto || '-') + (esGastoInversion(g) ? ' *' : '') + (g.categoria ? `\n(${g.categoria})` : ''),
         g.finca_nombre || 'General',
         (g.importe || 0).toFixed(2) + ' €'
       ]),
       theme: 'grid',
       headStyles: { fillColor: RED, fontSize: 7 },
-      bodyStyles: { fontSize: 7, cellPadding: 2 },
+      bodyStyles: { fontSize: 6.5, cellPadding: 1.8, overflow: 'linebreak' },
       columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 28 },
-        2: { cellWidth: 55 },
-        3: { cellWidth: 35 },
-        4: { halign: 'right', cellWidth: 28 },
+        0: { cellWidth: 17 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 33 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 40 },
+        5: { cellWidth: 25 },
+        6: { halign: 'right', cellWidth: 25 },
       },
-      margin: { left: 18, right: 18 },
+      margin: { left: 14, right: 14 },
     })
     y = doc.lastAutoTable.finalY + 8
+    if (gastosDetallados.some(esGastoInversion)) {
+      if (y > 280) { doc.addPage(); y = 20 }
+      doc.setFontSize(7)
+      doc.setTextColor(...GRAY)
+      doc.text('* Inversión: se justifica como gasto, pero no resta en el balance de la campaña.', 18, y)
+      y += 6
+    }
   }
 
   // === FOOTER on all pages ===

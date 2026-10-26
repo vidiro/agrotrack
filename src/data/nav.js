@@ -1,23 +1,48 @@
-export const PRIMARY_NAV = [
-  { id: 'dashboard', icon: 'Home', label: 'Inicio' },
-  { id: 'labores', icon: 'ClipboardList', label: 'Labores' },
-  { id: 'cosechas', icon: 'Grape', label: 'Cosechas' },
-  { id: 'finanzas', icon: 'Wallet', label: 'Finanzas' },
+// Navegación agrupada en 4 bloques (+ Inicio y Ajustes)
+
+export const PAGES = {
+  dashboard: { icon: 'Home', label: 'Inicio' },
+  // Campo
+  apuntar: { icon: 'PlusCircle', label: 'Apuntar' },
+  notas: { icon: 'StickyNote', label: 'Recordatorios' },
+  labores: { icon: 'ClipboardList', label: 'Labores' },
+  aplicaciones: { icon: 'SprayCan', label: 'Tratamientos' },
+  cosechas: { icon: 'Grape', label: 'Cosechas' },
+  // Dinero
+  gastos: { icon: 'Receipt', label: 'Gastos' },
+  facturas: { icon: 'FileSpreadsheet', label: 'Facturas' },
+  ingresos: { icon: 'Banknote', label: 'Ingresos' },
+  finanzas: { icon: 'Wallet', label: 'Finanzas' },
+  amortizaciones: { icon: 'Wrench', label: 'Inversiones' },
+  // Fincas
+  fincas: { icon: 'MapPin', label: 'Fincas' },
+  finca_detalle: { icon: 'FileText', label: 'Detalle finca' },
+  personal: { icon: 'Users', label: 'Personal' },
+  maquinaria: { icon: 'Tractor', label: 'Maquinaria' },
+  inventario: { icon: 'Package', label: 'Inventario' },
+  destinos: { icon: 'Factory', label: 'Destinos' },
+  // Papeles
+  informes: { icon: 'BarChart3', label: 'Informes' },
+  expedientes: { icon: 'FolderOpen', label: 'Ayudas' },
+  vencimientos: { icon: 'CalendarClock', label: 'Vencimientos' },
+  cuaderno: { icon: 'BookOpen', label: 'Cuaderno tratamientos' },
+  jornadas: { icon: 'Clock', label: 'Jornadas' },
+  gestoria: { icon: 'Briefcase', label: 'Gestoría' },
+  // Otros
+  configuracion: { icon: 'Settings', label: 'Ajustes' },
+}
+
+export const SECCIONES = [
+  { id: 'inicio', label: 'Inicio', icon: 'Home', pages: ['dashboard'] },
+  { id: 'campo', label: 'Campo', icon: 'Sprout', pages: ['apuntar', 'labores', 'aplicaciones', 'cosechas', 'notas'] },
+  { id: 'dinero', label: 'Dinero', icon: 'Wallet', pages: ['gastos', 'facturas', 'ingresos', 'finanzas', 'amortizaciones'] },
+  { id: 'fincas', label: 'Fincas', icon: 'MapPin', pages: ['fincas', 'finca_detalle', 'personal', 'maquinaria', 'inventario', 'destinos'] },
+  { id: 'papeles', label: 'Papeles', icon: 'FolderOpen', pages: ['informes', 'expedientes', 'vencimientos', 'cuaderno', 'jornadas', 'gestoria'] },
 ]
 
-export const MORE_NAV = [
-  { id: 'informes', icon: 'BarChart3', label: 'Informes' },
-  { id: 'aplicaciones', icon: 'SprayCan', label: 'Aplicaciones' },
-  { id: 'gastos', icon: 'Receipt', label: 'Gastos' },
-  { id: 'ingresos', icon: 'Banknote', label: 'Ingresos' },
-  { id: 'destinos', icon: 'Factory', label: 'Destinos' },
-  { id: 'fincas', icon: 'MapPin', label: 'Fincas' },
-  { id: 'finca_detalle', icon: 'FileText', label: 'Detalle Finca' },
-  { id: 'personal', icon: 'Users', label: 'Personal' },
-  { id: 'maquinaria', icon: 'Tractor', label: 'Maquinaria' },
-  { id: 'amortizaciones', icon: 'Wrench', label: 'Amortizaciones' },
-  { id: 'inventario', icon: 'Package', label: 'Inventario' },
-  { id: 'configuracion', icon: 'Settings', label: 'Ajustes' },
-]
+export function seccionDePagina(pageId) {
+  return SECCIONES.find(s => s.pages.includes(pageId)) || null
+}
 
-export const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV]
+// Compatibilidad: lista plana de todas las páginas
+export const ALL_NAV = Object.entries(PAGES).map(([id, p]) => ({ id, ...p }))

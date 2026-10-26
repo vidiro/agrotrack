@@ -1,35 +1,37 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../data/supabaseClient'
-import { format, isWithinInterval } from 'date-fns'
+import { fetchAll, isMissingTable } from '../utils/fetchAll'
+import { gastosCorrientes, gastosInversion, esGastoInversion } from '../utils/gastos'
+import { repartoLabor } from '../utils/labores'
+import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts'
 import { downloadCSV } from '../utils/csvExport'
-import { generateReportPDF } from '../utils/pdfReport'
 import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
 import { getParamValue } from '../utils/params'
+import { calendarioCampanas } from '../utils/campanas'
+import { useRecuperacion } from '../utils/useRecuperacion'
+import { textoEstado, etiquetaCampana, eur } from './RecuperacionInversion'
 
 const COLORES = ['#1a472a', '#d4a017', '#c0392b', '#2980b9', '#8e44ad', '#27ae60', '#e67e22', '#16a085']
 
-/**
- * Calcula las fechas de la campaña para un año dado.
- * La campaña se define por un mes/día de inicio (ej: 15 sept) y abarca hasta esa fecha del año siguiente.
- * campaignStartMonth: mes de inicio (9 = sept)
- * campaignStartDay: día de inicio (15)
- * year: año de referencia (la campaña "2025" va de sept 2024 a sept 2025)
- */
-function getCampaignDates(year, startMonth, startDay) {
-  const startDate = new Date(year - 1, startMonth - 1, startDay)
-  const endDate = new Date(year, startMonth - 1, startDay)
-  return { startDate, endDate }
+
+// ¿La fecha (yyyy-MM-dd) cae dentro de la campaña? Inicio incluido, fin excluido,
+// para que el día de cambio de campaña no cuente en dos campañas a la vez.
+function inCampaign(fecha, startDate, endDate) {
+  const d = new Date(String(fecha).substring(0, 10) + 'T00:00:00')
+  return d >= startDate && d < endDate
 }
 
-function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amortizaciones }) {
+function InformesPage({ fincas, personal, maquinaria, params, destinos, preciosDestino, onDataChange, onNavigate, amortizaciones }) {
   const [labores, setLabores] = useState([])
   const [cosechas, setCosechas] = useState([])
   const [gastos, setGastos] = useState([])
   const [ingresos, setIngresos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const recuperacion = useRecuperacion({ fincas, amortizaciones, params, destinos, preciosDestino, personal, maquinaria })
 
   // Período seleccionado: 'fiscal' o 'campana'
   const [periodType, setPeriodType] = useState('fiscal')
@@ -49,23 +51,24 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
   }, [currentYear, labores, cosechas, gastos, ingresos])
 
   // Configuración de campaña desde params
-  const campaignStartMonth = getParamValue(params, ['campana_mes_inicio'], 9) // sept por defecto
-  const campaignStartDay = getParamValue(params, ['campana_dia_inicio'], 15) // 15 sept por defecto
+  // Campañas: cada año puede empezar un día distinto (Ajustes → Campañas)
+  const cal = useMemo(() => calendarioCampanas(params), [params])
+  const getCampaignDates = (n) => { const r = cal.rango(n); return { startDate: r.start, endDate: r.end } }
 
   const loadData = async () => {
     setLoading(true)
     setError('')
     try {
       const [labRes, cosechRes, gastRes, ingrRes] = await Promise.all([
-        supabase.from('labores').select('*').order('fecha', { ascending: false }),
-        supabase.from('cosechas').select('*').order('fecha', { ascending: false }),
-        supabase.from('gastos_manual').select('*').order('fecha', { ascending: false }),
-        supabase.from('ingresos').select('*').order('fecha', { ascending: false })
+        fetchAll('labores', q => q.order('fecha', { ascending: false })),
+        fetchAll('cosechas', q => q.order('fecha', { ascending: false })),
+        fetchAll('gastos_manual', q => q.order('fecha', { ascending: false })),
+        fetchAll('ingresos', q => q.order('fecha', { ascending: false }))
       ])
       if (labRes.error) throw labRes.error
       if (cosechRes.error) throw cosechRes.error
       if (gastRes.error) throw gastRes.error
-      if (ingrRes.error && !ingrRes.message?.includes('Could not find the table')) throw ingrRes.error
+      if (ingrRes.error && !isMissingTable(ingrRes.error)) throw ingrRes.error
       setLabores(labRes.data || [])
       setCosechas(cosechRes.data || [])
       setGastos(gastRes.data || [])
@@ -90,18 +93,20 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
         return item.fecha.substring(0, 4) === String(selectedYear)
       })
     } else {
-      const { startDate, endDate } = getCampaignDates(selectedYear, campaignStartMonth, campaignStartDay)
+      const { startDate, endDate } = getCampaignDates(selectedYear)
       return items.filter(item => {
         if (!item.fecha) return false
-        const d = new Date(item.fecha)
-        return isWithinInterval(d, { start: startDate, end: endDate, inclusive: true })
+        return inCampaign(item.fecha, startDate, endDate)
       })
     }
   }
 
   const laboresFiltradas = filterByPeriod(labores)
   const cosechasFiltradas = filterByPeriod(cosechas)
-  const gastosFiltrados = filterByPeriod(gastos)
+  // Las compras de categoría «Inversión» no son coste corriente: se informan aparte
+  const gastosFiltrados = filterByPeriod(gastosCorrientes(gastos))
+  const inversionesFiltradas = filterByPeriod(gastosInversion(gastos))
+  const totalInversiones = inversionesFiltradas.reduce((s, g) => s + (g.importe || 0), 0)
   const ingresosFiltrados = filterByPeriod(ingresos)
 
   // === CÁLCULOS ===
@@ -113,7 +118,7 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
     const totalGastos = gastosFiltrados.reduce((s, g) => s + (g.importe || 0), 0)
     const totalIngresos = ingresosFiltrados.reduce((s, i) => s + (i.cantidad || 0), 0)
     const totalProduccion = cosechasFiltradas.reduce((s, c) => s + (c.kg || 0), 0)
-    const totalAceite = cosechasFiltradas.reduce((s, c) => s + (c.aceite_potencial || 0), 0)
+    const totalAceite = cosechasFiltradas.reduce((s, c) => s + (cosechaAceite(c) || 0), 0)
     const balance = totalIngresos - totalGastos - totalCostesLabores
 
     return {
@@ -176,38 +181,26 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
   // === Costes por finca ===
   const costesPorFinca = useMemo(() => {
     const fincasData = {}
+    // Cada jornada se reparte según lo hecho en cada finca (horas de peones, maquinaria de cada sección)
+    const ctxReparto = { personal, maquinaria, precioGasoil: getParamValue(params, ['precio_gasoil_l', 'coste_gasoleo'], 0) }
     laboresFiltradas.forEach(l => {
-      let fincasAsign = []
-      try {
-        const asign = l.asignaciones_fincas
-        if (asign) {
-          const parsed = typeof asign === 'string' ? JSON.parse(asign) : asign
-          if (Array.isArray(parsed)) {
-            if (parsed[0].tipo_trabajo !== undefined) {
-              fincasAsign = parsed.flatMap(s => s.fincas || [])
-            } else {
-              fincasAsign = parsed
-            }
-          }
-        }
-      } catch {}
-
-      const numFincas = fincasAsign.length || 1
-      const ids = fincasAsign.length > 0 ? fincasAsign.map(f => String(f.id_finca)) : [String(l.id_finca || '')]
-      ids.forEach(id => {
+      const reparto = repartoLabor(l, ctxReparto)
+      if (reparto.size === 0) reparto.set('', { peones: l.coste_peones || 0, maquinaria: l.coste_maquinaria || 0, gasoil: l.coste_gasoil || 0, total: l.coste_total || 0 })
+      reparto.forEach((r, id) => {
         const nombre = fincas.find(f => String(f.id_finca) === id)?.nombre || 'Sin finca'
-        if (!fincasData[nombre]) fincasData[nombre] = { peones: 0, maquinaria: 0, gasoil: 0, total: 0 }
-        fincasData[nombre].peones += (l.coste_peones || 0) / numFincas
-        fincasData[nombre].maquinaria += (l.coste_maquinaria || 0) / numFincas
-        fincasData[nombre].gasoil += (l.coste_gasoil || 0) / numFincas
-        fincasData[nombre].total += (l.coste_total || 0) / numFincas
+        if (!fincasData[nombre]) fincasData[nombre] = { peones: 0, maquinaria: 0, gasoil: 0, gastos: 0, total: 0 }
+        fincasData[nombre].peones += r.peones
+        fincasData[nombre].maquinaria += r.maquinaria
+        fincasData[nombre].gasoil += r.gasoil
+        fincasData[nombre].total += r.total
       })
     })
 
     gastosFiltrados.forEach(g => {
       const id = g.id_finca
       const nombre = fincas.find(f => String(f.id_finca) === String(id))?.nombre || 'General'
-      if (!fincasData[nombre]) fincasData[nombre] = { peones: 0, maquinaria: 0, gasoil: 0, total: 0 }
+      if (!fincasData[nombre]) fincasData[nombre] = { peones: 0, maquinaria: 0, gasoil: 0, gastos: 0, total: 0 }
+      fincasData[nombre].gastos += g.importe || 0
       fincasData[nombre].total += g.importe || 0
     })
 
@@ -216,9 +209,10 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
       peones: Math.round(data.peones * 100) / 100,
       maquinaria: Math.round(data.maquinaria * 100) / 100,
       gasoil: Math.round(data.gasoil * 100) / 100,
+      gastos: Math.round(data.gastos * 100) / 100,
       total: Math.round(data.total * 100) / 100
     })).sort((a, b) => b.total - a.total)
-  }, [laboresFiltradas, gastosFiltrados, fincas])
+  }, [laboresFiltradas, gastosFiltrados, fincas, personal, maquinaria, params])
 
   // === Evolución mensual del período ===
   const evolucionMensual = useMemo(() => {
@@ -250,21 +244,21 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
     if (periodType === 'fiscal') {
       return {
         ingresos: ingresos.filter(i => i.fecha && i.fecha.substring(0, 4) === String(yearPrev)).reduce((s, i) => s + (i.cantidad || 0), 0),
-        gastos: gastos.filter(g => g.fecha && g.fecha.substring(0, 4) === String(yearPrev)).reduce((s, g) => s + (g.importe || 0), 0),
+        gastos: gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.substring(0, 4) === String(yearPrev)).reduce((s, g) => s + (g.importe || 0), 0),
         costes: labores.filter(l => l.fecha && l.fecha.substring(0, 4) === String(yearPrev)).reduce((s, l) => s + (l.coste_total || 0), 0),
         produccion: cosechas.filter(c => c.fecha && c.fecha.substring(0, 4) === String(yearPrev)).reduce((s, c) => s + (c.kg || 0), 0)
       }
     } else {
-      const { startDate, endDate } = getCampaignDates(yearPrev, campaignStartMonth, campaignStartDay)
-      const inRange = (d) => isWithinInterval(new Date(d), { start: startDate, end: endDate, inclusive: true })
+      const { startDate, endDate } = getCampaignDates(yearPrev)
+      const inRange = (d) => inCampaign(d, startDate, endDate)
       return {
         ingresos: ingresos.filter(i => i.fecha && inRange(i.fecha)).reduce((s, i) => s + (i.cantidad || 0), 0),
-        gastos: gastos.filter(g => g.fecha && inRange(g.fecha)).reduce((s, g) => s + (g.importe || 0), 0),
+        gastos: gastosCorrientes(gastos).filter(g => g.fecha && inRange(g.fecha)).reduce((s, g) => s + (g.importe || 0), 0),
         costes: labores.filter(l => l.fecha && inRange(l.fecha)).reduce((s, l) => s + (l.coste_total || 0), 0),
         produccion: cosechas.filter(c => c.fecha && inRange(c.fecha)).reduce((s, c) => s + (c.kg || 0), 0)
       }
     }
-  }, [selectedYear, periodType, ingresos, gastos, labores, cosechas, campaignStartMonth, campaignStartDay])
+  }, [selectedYear, periodType, ingresos, gastos, labores, cosechas, cal])
 
   const calcVar = (actual, anterior) => {
     if (anterior === 0) return { pct: 0, positive: actual > 0 }
@@ -279,16 +273,14 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
   // === PERIODO LABEL ===
   const getPeriodLabel = () => {
     if (periodType === 'fiscal') return `Año Fiscal ${selectedYear} (1 ene - 31 dic)`
-    const mesNames = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    const startLabel = `${campaignStartDay} ${mesNames[campaignStartMonth]} ${selectedYear - 1}`
-    const endLabel = `${campaignStartDay} ${mesNames[campaignStartMonth]} ${selectedYear}`
-    return `Campaña ${selectedYear} (${startLabel} - ${endLabel})`
+    return cal.etiqueta(selectedYear)
   }
 
   // === EXPORTAR PDF ===
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     try {
-      console.log('Generando PDF...', { totales, gastosPorCategoria: gastosPorCategoria.length, ingresosPorOrigen: ingresosPorOrigen.length })
+      // jsPDF pesa mucho: se carga solo al exportar
+      const { generateReportPDF } = await import('../utils/pdfReport')
       const doc = generateReportPDF({
         title: periodType === 'fiscal' ? 'Informe Económico - Año Fiscal' : 'Informe Económico - Campaña',
         periodLabel: getPeriodLabel(),
@@ -301,7 +293,8 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
         produccionPorFinca,
         costesPorFinca,
         ingresosDetallados: ingresosFiltrados,
-        gastosDetallados: gastosFiltrados.map(g => ({ ...g, finca_nombre: fincas.find(f => String(f.id_finca) === String(g.id_finca))?.nombre || 'General' })),
+        totalInversiones,
+        gastosDetallados: [...gastosFiltrados, ...inversionesFiltradas].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map(g => ({ ...g, finca_nombre: fincas.find(f => String(f.id_finca) === String(g.id_finca))?.nombre || 'General' })),
         laboresDetalladas: laboresFiltradas,
         cosechasDetalladas: cosechasFiltradas,
         amortizaciones: amortizaciones || [],
@@ -311,7 +304,6 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
         varProduccion,
         periodoAnterior,
       })
-      console.log('PDF generado, guardando...')
       doc.save(`informe_${periodType}_${selectedYear}.pdf`)
       setSuccess('PDF exportado correctamente')
       setTimeout(() => setSuccess(''), 3000)
@@ -346,7 +338,21 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
       ...ingresosPorOrigen.map(i => ({ concepto: i.nombre, valor: i.valor.toFixed(2) + ' €' })),
       { concepto: '', valor: '' },
       { concepto: 'COSTES POR FINCA', valor: '' },
-      ...costesPorFinca.map(f => ({ concepto: f.finca, valor: f.total.toFixed(2) + ' €' }))
+      ...costesPorFinca.map(f => ({ concepto: f.finca, valor: f.total.toFixed(2) + ' €' })),
+      { concepto: '', valor: '' },
+      { concepto: 'DETALLE DE GASTOS Y FACTURAS (fecha · nº factura · empresa · CIF · concepto)', valor: '' },
+      ...[...gastosFiltrados, ...inversionesFiltradas]
+        .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+        .map(g => ({
+          concepto: [
+            g.fecha ? `${g.fecha.substring(8, 10)}/${g.fecha.substring(5, 7)}/${g.fecha.substring(0, 4)}` : '-',
+            g.num_factura ? `Fra. ${g.num_factura}` : 'Sin nº factura',
+            g.proveedor || 'Sin empresa',
+            g.nif_proveedor || 'Sin CIF',
+            (g.concepto || '-') + (esGastoInversion(g) ? ' (inversión)' : ''),
+          ].join(' · '),
+          valor: (g.importe || 0).toFixed(2) + ' €',
+        }))
     ]
     downloadCSV(`informe_${periodType}_${selectedYear}`, ['concepto', 'valor'], rows)
   }
@@ -362,6 +368,7 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
 
   return (
     <div>
+      {success && <div className="alert alert-success" role="status">{success}</div>}
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <span> {error}</span>
@@ -459,6 +466,15 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
               <td><strong>Total gastos + costes</strong></td>
               <td style={{ textAlign: 'right' }}><strong style={{ color: 'var(--color-danger)' }}>{(totales.totalGastos + totales.totalCostesLabores).toFixed(2)} €</strong></td>
             </tr>
+            {totalInversiones > 0 && (
+              <tr>
+                <td>
+                  Inversiones ({inversionesFiltradas.length} registros)
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Gastos de categoría «Inversión»: aparecen en el detalle de gastos, pero no restan en el balance</div>
+                </td>
+                <td style={{ textAlign: 'right' }}><strong>{totalInversiones.toFixed(2)} €</strong></td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -484,7 +500,7 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
       </div>
 
       {/* GRÁFICOS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 16, marginBottom: 16 }}>
         {/* Gastos por categoría */}
         <div className="card">
           <div className="card-title"> Gastos por Categoría</div>
@@ -592,10 +608,13 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
       {/* COSTES POR FINCA */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title"> Costes por Finca</div>
+        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '-4px 0 12px' }}>
+          «Gastos» son los registrados en la página Gastos para cada finca. Las compras de tierra, plantaciones o maquinaria deben ir en Inversiones, no aquí.
+        </p>
         {costesPorFinca.length > 0 ? (
           <div className="table-container">
             <table className="data-table">
-              <thead><tr><th>Finca</th><th style={{ textAlign: 'right' }}>Salarios</th><th style={{ textAlign: 'right' }}>Maq.</th><th style={{ textAlign: 'right' }}>Gasóleo</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
+              <thead><tr><th>Finca</th><th style={{ textAlign: 'right' }}>Salarios</th><th style={{ textAlign: 'right' }}>Maq.</th><th style={{ textAlign: 'right' }}>Gasóleo</th><th style={{ textAlign: 'right' }}>Gastos</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
               <tbody>
                 {costesPorFinca.map((f, i) => (
                   <tr key={i}>
@@ -603,6 +622,7 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
                     <td style={{ textAlign: 'right' }}>{f.peones.toFixed(2)} €</td>
                     <td style={{ textAlign: 'right' }}>{f.maquinaria.toFixed(2)} €</td>
                     <td style={{ textAlign: 'right' }}>{f.gasoil.toFixed(2)} €</td>
+                    <td style={{ textAlign: 'right' }}>{f.gastos.toFixed(2)} €</td>
                     <td style={{ textAlign: 'right' }}><strong>{f.total.toFixed(2)} €</strong></td>
                   </tr>
                 ))}
@@ -613,6 +633,48 @@ function InformesPage({ fincas, personal, maquinaria, params, onDataChange, amor
           <div className="empty-state"><div className="empty-state-text">Sin costes en este período</div></div>
         )}
       </div>
+
+      {/* RECUPERACIÓN DE INVERSIONES (todo el histórico, no depende del período) */}
+      {recuperacion.resultados.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Recuperación de inversiones por finca</div>
+          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '-4px 0 12px' }}>
+            Desde la compra hasta hoy, sin depender del período elegido arriba. Pulsa una finca para ver el detalle.
+          </p>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Finca</th>
+                  <th style={{ textAlign: 'right' }}>Inversión</th>
+                  <th style={{ textAlign: 'right' }}>Recuperado</th>
+                  <th style={{ textAlign: 'right' }}>%</th>
+                  <th>Se paga</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recuperacion.resultados.map(r => (
+                  <tr key={r.id_finca}>
+                    <td>
+                      <button type="button" className="btn-link" onClick={() => onNavigate?.('finca_detalle', r.id_finca)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>
+                        {r.nombre}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{eur(r.inversion)}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{eur(r.recuperado)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{Math.round(r.pct * 100)} %</td>
+                    <td style={{ fontSize: 13 }} title={textoEstado(r)}>
+                      {r.estado === 'recuperada' ? `Pagada (${etiquetaCampana(r.campanaPago)})`
+                        : r.estado === 'en_curso' ? `≈ ${etiquetaCampana(r.campanaPago)}`
+                        : 'No al ritmo actual'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* BOTONES EXPORTAR */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>

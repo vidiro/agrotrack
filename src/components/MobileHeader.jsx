@@ -1,26 +1,35 @@
-import { ALL_NAV } from '../data/nav'
+import { PAGES } from '../data/nav'
 import { getIcon } from '../utils/lucideIcons'
+import { useColaPendiente } from '../utils/offline'
 
-function MobileHeader({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen, darkMode, toggleDarkMode }) {
-  const currentPageData = ALL_NAV.find(item => item.id === currentPage)
-  const pageTitle = currentPageData?.label || 'AGROtrack'
+function MobileHeader({ currentPage, setCurrentPage, mobileMenuOpen, setMobileMenuOpen }) {
+  const page = PAGES[currentPage]
+  const { pendientes, enLinea } = useColaPendiente()
 
   return (
     <header className="mobile-header">
       <div className="flex items-center justify-between">
         <h1>
-          {getIcon(currentPageData?.icon || 'Tractor', { size: 20, strokeWidth: 2 })}
-          {pageTitle}
+          {getIcon(page?.icon || 'Tractor', { size: 20, strokeWidth: 2 })}
+          {page?.label || 'AGROtrack'}
         </h1>
         <div className="mobile-header-actions">
+          {(!enLinea || pendientes > 0) && (
+            <span className="estado-conexion" role="status" title={enLinea ? 'Enviando registros guardados sin cobertura' : 'Sin cobertura: lo que guardes se enviará al recuperar la señal'}>
+              {getIcon('CloudOff', { size: 18 })}
+              {pendientes > 0 ? pendientes : ''}
+            </span>
+          )}
           <button
+            type="button"
             className="mobile-header-btn"
-            onClick={toggleDarkMode}
-            aria-label={darkMode ? 'Modo claro' : 'Modo oscuro'}
+            onClick={() => setCurrentPage('configuracion')}
+            aria-label="Ajustes"
           >
-            {getIcon(darkMode ? 'Sun' : 'Moon', { size: 20, strokeWidth: 2 })}
+            {getIcon('Settings', { size: 20, strokeWidth: 2 })}
           </button>
           <button
+            type="button"
             className="mobile-header-btn"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
