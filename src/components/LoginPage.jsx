@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../data/supabaseClient'
 import { getIcon } from '../utils/lucideIcons'
+import { Marca } from './TopBar'
 
 function LoginPage({ darkMode, toggleDarkMode }) {
   const [email, setEmail] = useState('')
@@ -49,9 +50,9 @@ function LoginPage({ darkMode, toggleDarkMode }) {
       </button>
       <div className="login-card">
         <div className="login-brand">
-          <span className="login-logo" aria-hidden="true">{getIcon('Tractor', { size: 48, strokeWidth: 1.5 })}</span>
-          <h1>AGROtrack</h1>
-          <p>Gestión de la explotación. Acceso restringido.</p>
+          <span className="login-logo" aria-hidden="true"><Marca tamano={64} /></span>
+          <h1 className="marca-nombre" style={{ fontSize: '2rem' }}>AGRO<b>track</b></h1>
+          <p>El campo y sus papeles, en el bolsillo.</p>
         </div>
 
         {!isSupabaseConfigured && (

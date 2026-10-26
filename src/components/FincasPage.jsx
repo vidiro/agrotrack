@@ -258,7 +258,7 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               onClick={() => toggleSort(field)}
               aria-label={`Ordenar por ${field}`}
             >
-              {field === 'nombre' ? ' Nombre' : field === 'superficie' ? '📏 Superficie' : field === 'cultivo' ? '🌱 Cultivo' : '📅 Año'}
+              {field === 'nombre' ? ' Nombre' : field === 'superficie' ? 'Superficie' : field === 'cultivo' ? 'Cultivo' : 'Año'}
               {sortBy === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
@@ -366,11 +366,11 @@ function FincasPage({ fincas: fincasOrig, onDataChange, onNavigate }) {
               <h3 className="finca-card-name">{f.nombre}</h3>
               <div className="finca-card-info">
                 {f.termino_municipal && <div className="info-row"> {f.termino_municipal}</div>}
-                {f.superficie_total_ha && <div className="info-row">📏 {f.superficie_total_ha} ha</div>}
+                {f.superficie_total_ha && <div className="info-row">{f.superficie_total_ha} ha</div>}
                 {f.tipo_suelo && <div className="info-row"> {f.tipo_suelo}</div>}
                 {f.variedad && <div className="info-row"> {f.variedad}</div>}
-                {f.ano_plantacion && <div className="info-row">📅 {f.ano_plantacion}</div>}
-                {f.poligono && <div className="info-row">📐 {f.poligono} {f.parcela}</div>}
+                {f.ano_plantacion && <div className="info-row">{f.ano_plantacion}</div>}
+                {f.poligono && <div className="info-row">{f.poligono} {f.parcela}</div>}
               </div>
               {f.notas && <p className="finca-card-notes">{f.notas}</p>}
               <div className="finca-card-actions">

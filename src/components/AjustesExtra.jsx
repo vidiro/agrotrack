@@ -6,7 +6,7 @@ import { procesarCola, useColaPendiente } from '../utils/offline'
 import { Campo } from './ui'
 
 // Ajustes nuevos: datos del titular, modo campo, envíos sin cobertura y copia de seguridad
-function AjustesExtra({ modoCampo, toggleModoCampo }) {
+function AjustesExtra({ modoCampo, toggleModoCampo, darkMode, toggleDarkMode }) {
   const { explotacion, disponible, guardar } = useExplotacion()
   const [form, setForm] = useState({ nombre_titular: '', nif_titular: '', rega: '', direccion: '' })
   const [msg, setMsg] = useState('')
@@ -84,13 +84,19 @@ function AjustesExtra({ modoCampo, toggleModoCampo }) {
       </div>
 
       <div className="card">
-        <div className="card-title">Uso en el campo</div>
+        <div className="card-title">Pantalla y uso en el campo</div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, minHeight: 44, cursor: 'pointer' }}>
           <input type="checkbox" checked={!!modoCampo} onChange={toggleModoCampo} style={{ width: 22, height: 22 }} />
           Modo campo: letra y botones más grandes y más contraste para ver el móvil al sol
         </label>
+        {toggleDarkMode && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, minHeight: 44, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!darkMode} onChange={toggleDarkMode} style={{ width: 22, height: 22 }} />
+            Modo oscuro (para usar de noche)
+          </label>
+        )}
         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '8px 0 0' }}>
-          Sin cobertura puedes apuntar labores, cosechas, gastos y facturas (sin foto): se guardan en el móvil y se envían solos al volver la señal.
+          Sin cobertura puedes apuntar jornadas, tratamientos, facturas con foto y recordatorios: se guardan en el móvil y se envían solos al volver la señal.
           {' '}{enLinea ? 'Ahora hay conexión.' : 'Ahora mismo no hay conexión.'}
           {pendientes > 0 && <> {pendientes} pendientes de enviar. <button type="button" className="btn btn-small btn-accent" onClick={() => procesarCola()}>Enviar ahora</button></>}
         </p>

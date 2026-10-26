@@ -172,7 +172,7 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
 
       {showForm && (
         <div className="card">
-          <div className="card-title">👤 {editingId ? 'Editar Operario' : 'Nuevo Operario'}</div>
+          <div className="card-title">{editingId ? 'Editar Operario' : 'Nuevo Operario'}</div>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
@@ -247,7 +247,7 @@ function PersonalPage({ personal: personalOrig, onDataChange }) {
           </div>
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">👤</div>
+            <div className="empty-state-icon"></div>
             <div className="empty-state-text">
               {searchTerm ? 'No se encontraron operarios con esa búsqueda' : 'No hay operarios registrados'}
             </div>

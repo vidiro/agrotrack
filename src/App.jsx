@@ -1,10 +1,9 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
-import { getIcon } from './utils/lucideIcons'
 import { supabase, isSupabaseConfigured } from './data/supabaseClient'
 import { isMissingTable } from './utils/fetchAll'
 import LoginPage from './components/LoginPage'
-import Sidebar from './components/Sidebar'
-import MobileHeader from './components/MobileHeader'
+import TopBar from './components/TopBar'
+import AccionesApuntar from './components/campo/AccionesApuntar'
 import BottomNav from './components/BottomNav'
 import SectionTabs from './components/SectionTabs'
 import { iniciarColaAutomatica, esErrorDeRed } from './utils/offline'
@@ -41,7 +40,6 @@ function App() {
   const [session, setSession] = useState(undefined)
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [selectedFincaForDetail, setSelectedFincaForDetail] = useState('')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [fincas, setFincas] = useState([])
   const [personal, setPersonal] = useState([])
   const [maquinaria, setMaquinaria] = useState([])
@@ -167,7 +165,6 @@ function App() {
   }, [session])
 
   const handleLogout = async () => {
-    setMobileMenuOpen(false)
     // Borra los datos guardados para usar sin cobertura (por si el móvil es compartido)
     try { if ('caches' in window) await caches.delete('supabase-api') } catch { /* nada */ }
     await supabase.auth.signOut()
@@ -269,34 +266,7 @@ function App() {
 
   return (
     <div className="app-container">
-      {mobileMenuOpen && (
-        <button
-          type="button"
-          className="sidebar-backdrop"
-          aria-label="Cerrar menú"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      <Sidebar
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-        darkMode={darkMode}
-        toggleDarkMode={toggleDarkMode}
-        modoCampo={modoCampo}
-        toggleModoCampo={toggleModoCampo}
-        userEmail={session.user?.email}
-        onLogout={handleLogout}
-      />
-
-      <MobileHeader
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-      />
+      <TopBar currentPage={currentPage} setCurrentPage={setCurrentPage} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
 
       <main className="main-content">
         <SectionTabs currentPage={currentPage} setCurrentPage={setCurrentPage} />
@@ -331,10 +301,8 @@ function App() {
         )}
       </main>
 
-      {currentPage !== 'apuntar' && (
-        <button type="button" className="fab-apuntar" onClick={() => setCurrentPage('apuntar')} aria-label="Apuntar jornada, tratamiento, gasto o recordatorio">
-          {getIcon('Plus', { size: 30, strokeWidth: 2.5 })}
-        </button>
+      {!['dashboard', 'apuntar'].includes(currentPage) && !loading && (
+        <AccionesApuntar modo="fab" fincas={fincas} personal={personal} maquinaria={maquinaria} params={params} onDataChange={onDataChange} />
       )}
 
       <BottomNav currentPage={currentPage} setCurrentPage={setCurrentPage} />

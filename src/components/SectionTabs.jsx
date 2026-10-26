@@ -8,9 +8,9 @@ function SectionTabs({ currentPage, setCurrentPage }) {
 
   return (
     <nav className="section-tabs" aria-label={`Apartados de ${sec.label}`}>
-      <span className="section-tabs-titulo">{sec.label}</span>
+      <h1 className="section-tabs-titulo">{sec.label}</h1>
       <div className="section-tabs-lista" role="tablist">
-        {sec.pages.map(id => (
+        {sec.pages.filter(id => id !== 'finca_detalle' || currentPage === id).map(id => (
           <button
             key={id}
             type="button"

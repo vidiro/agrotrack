@@ -4,7 +4,7 @@ import { supabase } from '../data/supabaseClient'
 import AjustesExtra from './AjustesExtra'
 import CampanasAnio from './CampanasAnio'
 
-function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogout, modoCampo, toggleModoCampo }) {
+function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogout, modoCampo, toggleModoCampo, darkMode, toggleDarkMode }) {
   const [params, setParams] = useState(paramsOrig)
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState('')
@@ -82,7 +82,7 @@ function ConfiguracionPage({ params: paramsOrig, onDataChange, userEmail, onLogo
         </button>
       </div>
 
-      <AjustesExtra modoCampo={modoCampo} toggleModoCampo={toggleModoCampo} />
+      <AjustesExtra modoCampo={modoCampo} toggleModoCampo={toggleModoCampo} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
 
       <div className="card">
         <div className="card-title"> Parámetros de configuración</div>

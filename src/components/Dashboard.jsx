@@ -1,349 +1,145 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '../data/supabaseClient'
+// Inicio: lo importante, en grande.
+// 1) Apuntar (4 botones)  2) Recordatorios y avisos  3) Cómo va la campaña  4) Números y gráficos (bajo demanda)
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { fetchAll, isMissingTable } from '../utils/fetchAll'
 import { gastosCorrientes } from '../utils/gastos'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts'
-import { format, subMonths } from 'date-fns'
-import { es } from 'date-fns/locale'
-import { cosechaKilogrados, cosechaAceite } from '../utils/cosecha'
 import { getIcon } from '../utils/lucideIcons'
-import { getParamValue } from '../utils/params'
-import Pendientes from './Pendientes'
 import { calendarioCampanas } from '../utils/campanas'
+import { useExplotacion } from '../utils/explotacion'
+import { eur } from '../utils/formato'
+import { esErrorDeRed } from '../utils/offline'
+import Pendientes from './Pendientes'
+import RecordatoriosCard from './RecordatoriosCard'
+import AccionesApuntar from './campo/AccionesApuntar'
 
-function Dashboard({ fincas, personal, maquinaria, params, onNavigate }) {
-  const [labores, setLabores] = useState([])
-  const [cosechas, setCosechas] = useState([])
-  const [gastos, setGastos] = useState([])
-  const [ingresos, setIngresos] = useState([])
-  const [loading, setLoading] = useState(true)
+const ResumenDetallado = lazy(() => import('./ResumenDetallado'))
+
+function saludo() {
+  const h = new Date().getHours()
+  if (h < 6) return 'Buenas noches'
+  if (h < 14) return 'Buenos días'
+  if (h < 21) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
+function Dashboard(props) {
+  const { fincas, personal, maquinaria, params, onNavigate } = props
+  const [datos, setDatos] = useState({ labores: [], cosechas: [], gastos: [], ingresos: [] })
+  const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'))
+  const [verDetalle, setVerDetalle] = useState(false)
+  const { explotacion } = useExplotacion()
 
-  const loadData = async () => {
-    setLoading(true)
+  const cargar = async () => {
     setError('')
     try {
-      const [labRes, cosechRes, gastRes, ingrRes] = await Promise.all([
+      const [lab, cos, gas, ing] = await Promise.all([
         fetchAll('labores', q => q.order('fecha', { ascending: false })),
         fetchAll('cosechas', q => q.order('fecha', { ascending: false })),
         fetchAll('gastos_manual', q => q.order('fecha', { ascending: false })),
-        fetchAll('ingresos', q => q.order('fecha', { ascending: false }))
+        fetchAll('ingresos', q => q.order('fecha', { ascending: false })),
       ])
-      if (labRes.error) throw labRes.error
-      if (cosechRes.error) throw cosechRes.error
-      if (gastRes.error) throw gastRes.error
-      if (ingrRes.error && !isMissingTable(ingrRes.error)) throw ingrRes.error
-      setLabores(labRes.data || [])
-      setCosechas(cosechRes.data || [])
-      setGastos(gastRes.data || [])
-      setIngresos(ingrRes.data || [])
-      if (ingrRes.error && !ingrRes.data) {
-        setError('Tabla "ingresos" no encontrada en la base de datos.')
-      }
+      for (const r of [lab, cos, gas]) if (r.error) throw r.error
+      if (ing.error && !isMissingTable(ing.error)) throw ing.error
+      setDatos({ labores: lab.data || [], cosechas: cos.data || [], gastos: gas.data || [], ingresos: ing.data || [] })
     } catch (err) {
-      setError(err.message)
+      setError(esErrorDeRed(err) ? 'Sin cobertura: puedes apuntar igual. Las cifras se actualizan cuando vuelva la señal.' : err.message)
     } finally {
-      setLoading(false)
+      setCargando(false)
     }
   }
+  useEffect(() => { cargar() }, [])
 
-  useEffect(() => { loadData() }, [])
+  const { labores, cosechas, gastos, ingresos } = datos
 
-  const meses = Array.from({ length: 6 }, (_, i) => {
-    const d = subMonths(new Date(), i)
-    return format(d, 'yyyy-MM')
-  })
+  // Campaña en curso, con su fecha de inicio real (Ajustes → Campañas)
+  const cal = calendarioCampanas(params)
+  const campana = cal.campanaDe(new Date())
+  const { start, end } = cal.rango(campana)
+  const dentro = (f) => { if (!f) return false; const d = new Date(String(f).substring(0, 10) + 'T00:00:00'); return d >= start && d < end }
+  const ingresado = ingresos.filter(i => dentro(i.fecha)).reduce((s, i) => s + (parseFloat(i.cantidad) || 0), 0)
+  const gastado = gastosCorrientes(gastos).filter(g => dentro(g.fecha)).reduce((s, g) => s + (parseFloat(g.importe) || 0), 0)
+  const manoDeObra = labores.filter(l => dentro(l.fecha)).reduce((s, l) => s + (parseFloat(l.coste_total) || 0), 0)
+  const resultado = ingresado - gastado - manoDeObra
+  const jornadas = labores.filter(l => dentro(l.fecha)).length
+  const kg = cosechas.filter(c => dentro(c.fecha)).reduce((s, c) => s + (parseFloat(c.kg) || 0), 0)
 
-  const laboresMes = labores.filter(l => l.fecha && l.fecha.startsWith(selectedMonth))
-  const cosechasMes = cosechas.filter(c => c.fecha && c.fecha.startsWith(selectedMonth))
-  const gastosMes = gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.startsWith(selectedMonth))
-  const ingresosMes = ingresos.filter(i => i.fecha && i.fecha.startsWith(selectedMonth))
-
-  const totalCostesLabores = laboresMes.reduce((s, l) => s + (l.coste_total || 0), 0)
-  const totalCostePeones = laboresMes.reduce((s, l) => s + (l.coste_peones || 0), 0)
-  const totalCosteMaquinaria = laboresMes.reduce((s, l) => s + (l.coste_maquinaria || 0), 0)
-  const totalCosteGasoil = laboresMes.reduce((s, l) => s + (l.coste_gasoil || 0), 0)
-  const totalGastos = gastosMes.reduce((s, g) => s + (g.importe || 0), 0)
-  const totalIngresos = ingresosMes.reduce((s, i) => s + (i.cantidad || 0), 0)
-  const totalProduccion = cosechasMes.reduce((s, c) => s + (c.kg || 0), 0)
-  const totalKilogrados = cosechasMes.reduce((s, c) => s + (cosechaKilogrados(c) || 0), 0)
-  const totalAceite = cosechasMes.reduce((s, c) => s + (cosechaAceite(c) || 0), 0)
-  const numLabores = laboresMes.length
-  const numCosechas = cosechasMes.length
-  const balanceContable = totalIngresos - totalGastos - totalCostesLabores
-  const balanceSinSalarios = totalIngresos - totalGastos - totalCosteMaquinaria - totalCosteGasoil
-  const balanceCaja = totalIngresos - totalGastos
-
-  // Gastos por categoría
-  const gastosPorCategoria = {}
-  gastosMes.forEach(g => {
-    const cat = g.categoria || 'Gastos directos'
-    gastosPorCategoria[cat] = (gastosPorCategoria[cat] || 0) + (g.importe || 0)
-  })
-  if (totalCostePeones > 0) gastosPorCategoria['Salarios'] = (gastosPorCategoria['Salarios'] || 0) + totalCostePeones
-  if (totalCosteMaquinaria > 0) gastosPorCategoria['Maquinaria'] = (gastosPorCategoria['Maquinaria'] || 0) + totalCosteMaquinaria
-  if (totalCosteGasoil > 0) gastosPorCategoria['Gasóleo'] = (gastosPorCategoria['Gasóleo'] || 0) + totalCosteGasoil
-  const datosGraficoGastos = Object.entries(gastosPorCategoria).map(([nombre, valor]) => ({ nombre, valor }))
-
-  // Producción anual por cultivo
-  const anosUnicos = [...new Set(cosechas.filter(c => c.fecha).map(c => c.fecha.substring(0, 4)))].sort()
-  const tiposCultivo = [...new Set(cosechas.map(c => c.cultivo).filter(Boolean))]
-  const datosProduccionAnual = anosUnicos.map(anio => {
-    const row = { año: anio }
-    tiposCultivo.forEach(cultivo => {
-      const kg = cosechas.filter(c => c.fecha && c.fecha.startsWith(anio) && c.cultivo === cultivo).reduce((s, c) => s + (c.kg || 0), 0)
-      row[cultivo] = kg
-    })
-    return row
-  })
-
-  // Ingresos vs Gastos anuales
-  const datosAnuales = anosUnicos.map(anio => {
-    const gastosAnio = gastosCorrientes(gastos).filter(g => g.fecha && g.fecha.startsWith(anio)).reduce((s, g) => s + (g.importe || 0), 0)
-    const laboresAnio = labores.filter(l => l.fecha && l.fecha.startsWith(anio)).reduce((s, l) => s + (l.coste_total || 0), 0)
-    const ingresosAnio = ingresos.filter(i => i.fecha && i.fecha.startsWith(anio)).reduce((s, i) => s + (i.cantidad || 0), 0)
-    return { año: anio, gastos: gastosAnio + laboresAnio, ingresos: ingresosAnio }
-  })
-
-  // Colores del tema CSS
-  const verdeCampo = '#1f4d33'
-  const trigo = '#e9b949'
-  const rojo = '#a63a2b'
-  const tierra = '#7a4a1f'
-  const vina = '#6b2f6b'
-  const olivar = '#5d8a3f'
-
-  if (loading) {
-    return (
-      <div className="empty-state" aria-busy="true">
-        <div className="spinner"></div>
-        <p className="mt-16">Cargando datos...</p>
-      </div>
-    )
-  }
+  const nombre = String(explotacion?.nombre_titular || '').trim().split(/\s+/)[0]
+  const hoyTexto = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+  const hoyLargo = hoyTexto.charAt(0).toUpperCase() + hoyTexto.slice(1)
+  const fmt = (d) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 
   return (
-    <div>
+    <div className="inicio">
+      <header className="inicio-saludo">
+        <p className="inicio-fecha">{hoyLargo}</p>
+        <h1>{saludo()}{nombre ? `, ${nombre}` : ''}</h1>
+      </header>
+
       {error && (
         <div className="alert alert-error" role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <span>{error}</span>
-          <button className="btn btn-small btn-primary" onClick={loadData} aria-label="Reintentar">
-            {getIcon('RefreshCw', { size: 16 })} Reintentar
-          </button>
+          <button className="btn btn-small btn-primary" onClick={cargar}>Reintentar</button>
         </div>
       )}
 
-      {/* Lo primero: lo que hay que hacer */}
-      <Pendientes fincas={fincas} labores={labores} cosechas={cosechas} gastos={gastos} ingresos={ingresos} onNavigate={onNavigate} />
+      <section aria-labelledby="titulo-apuntar" className="inicio-bloque">
+        <h2 id="titulo-apuntar" className="bloque-titulo">¿Qué quieres apuntar?</h2>
+        <AccionesApuntar modo="tiles" {...props} onDataChange={() => { cargar(); props.onDataChange?.() }} />
+      </section>
 
-      {/* Selector de mes */}
-      <div className="flex items-center gap-12 mb-24 flex-wrap" style={{ justifyContent: 'flex-end' }}>
-        <label className="form-label mb-0">Mes:</label>
-        <select
-          className="form-select"
-          style={{ width: 'auto' }}
-          value={selectedMonth}
-          onChange={e => setSelectedMonth(e.target.value)}
-          aria-label="Seleccionar mes"
-        >
-          {meses.map(m => (
-            <option key={m} value={m}>{format(new Date(m + '-01'), 'MMMM yyyy', { locale: es })}</option>
-          ))}
-        </select>
+      <div className="inicio-columnas">
+        <RecordatoriosCard fincas={fincas} onNavigate={onNavigate} />
+        <Pendientes fincas={fincas} labores={labores} cosechas={cosechas} gastos={gastos} ingresos={ingresos} onNavigate={onNavigate} sinNotas />
       </div>
 
-      {/* Tarjetas de resumen */}
-      <div className="summary-grid">
-        <div className="summary-card">
-          <div className="summary-value">{numLabores}</div>
-          <div className="summary-label">Labores registradas</div>
+      <section className="panel panel-campana" aria-labelledby="titulo-campana">
+        <div className="panel-cabecera">
+          <h2 id="titulo-campana">{getIcon('Sprout', { size: 20 })} Campaña {campana}</h2>
+          <span className="panel-nota">{fmt(start)} – {fmt(new Date(end.getTime() - 86400000))}</span>
         </div>
-        <div className="summary-card accent">
-          <div className="summary-value">{totalProduccion.toFixed(0)} kg</div>
-          <div className="summary-label">Producción total</div>
-        </div>
-        <div className="summary-card danger">
-          <div className="summary-value">{totalGastos.toFixed(2)} €</div>
-          <div className="summary-label">Gastos directos</div>
-        </div>
-        <div className="summary-card success">
-          <div className="summary-value">{totalIngresos.toFixed(2)} €</div>
-          <div className="summary-label">Ingresos mes</div>
-        </div>
+        {cargando ? <p className="panel-vacio">Cargando…</p> : (
+          <>
+            <div className="cifras">
+              <button type="button" className="cifra" onClick={() => onNavigate?.('ingresos')}>
+                <span className="cifra-etiqueta">Ingresado</span>
+                <span className="cifra-valor positivo">{eur(ingresado, 0)}</span>
+              </button>
+              <button type="button" className="cifra" onClick={() => onNavigate?.('gastos')}>
+                <span className="cifra-etiqueta">Gastos</span>
+                <span className="cifra-valor">{eur(gastado, 0)}</span>
+              </button>
+              <button type="button" className="cifra" onClick={() => onNavigate?.('labores')}>
+                <span className="cifra-etiqueta">Jornales y máquinas</span>
+                <span className="cifra-valor">{eur(manoDeObra, 0)}</span>
+              </button>
+              <button type="button" className="cifra cifra-destacada" onClick={() => onNavigate?.('finanzas')}>
+                <span className="cifra-etiqueta">Resultado</span>
+                <span className={`cifra-valor ${resultado >= 0 ? 'positivo' : 'negativo'}`}>{resultado >= 0 ? '+' : '−'}{eur(Math.abs(resultado), 0)}</span>
+              </button>
+            </div>
+            <p className="panel-pie">
+              {jornadas} {jornadas === 1 ? 'jornada apuntada' : 'jornadas apuntadas'} · {Math.round(kg).toLocaleString('es-ES')} kg cosechados.
+              Las inversiones (compra de tierra, plantación…) no restan aquí.
+            </p>
+          </>
+        )}
+      </section>
+
+      <div className="inicio-mas">
+        <button type="button" className="btn btn-grande-sec" onClick={() => setVerDetalle(v => !v)} aria-expanded={verDetalle}>
+          {getIcon('BarChart3', { size: 20 })} {verDetalle ? 'Ocultar números del mes' : 'Ver números del mes y gráficos'}
+        </button>
+        <button type="button" className="btn btn-grande-sec" onClick={() => onNavigate?.('informes')}>
+          {getIcon('FileText', { size: 20 })} Informes y PDF
+        </button>
       </div>
 
-      {/* Balance del mes */}
-      <div className="card" style={{ borderColor: balanceContable >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-        <div className="card-title" style={{ gap: 8 }}>
-          Balance del mes
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 16 }}>
-          <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--texto-suave)' }}>Caja</div>
-            <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.25rem', fontWeight: 700, color: balanceCaja >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-              {balanceCaja >= 0 ? '+' : '−'}{Math.abs(balanceCaja).toFixed(0)} €
-            </div>
-          </div>
-          <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--texto-suave)' }}>Sin salarios</div>
-            <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.25rem', fontWeight: 700, color: balanceSinSalarios >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-              {balanceSinSalarios >= 0 ? '+' : '−'}{Math.abs(balanceSinSalarios).toFixed(0)} €
-            </div>
-          </div>
-          <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--texto-suave)' }}>Contable</div>
-            <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.25rem', fontWeight: 700, color: balanceContable >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-              {balanceContable >= 0 ? '+' : '−'}{Math.abs(balanceContable).toFixed(0)} €
-            </div>
-          </div>
-        </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--texto-suave)', borderTop: '1px solid var(--borde)', paddingTop: 12, marginTop: 12 }}>
-          Ingresos: <strong>{totalIngresos.toFixed(2)} €</strong> · Gastos directos: <strong>{totalGastos.toFixed(2)} €</strong> · Costes labores: <strong>{totalCostesLabores.toFixed(2)} €</strong>
-        </div>
-      </div>
-
-      {/* Gráficos - Barras horizontales */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16 }}>
-        {/* Gastos por categoría */}
-        <div className="card">
-          <div className="card-title">Gastos por Categoría</div>
-          {datosGraficoGastos.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={datosGraficoGastos} layout="vertical" margin={{ right: 60 }}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="nombre" width={80} fontSize={12} tick={{ fill: 'var(--tinta)' }} />
-                <Tooltip formatter={(v) => v.toFixed(2) + ' €'} />
-                <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
-                  {datosGraficoGastos.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={[verdeCampo, trigo, rojo, '#2980b9', vina, olivar, '#e67e22', '#16a085'][index % 8]} />
-                  ))}
-                </Bar>
-                <Legend />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-text">Sin gastos este mes</div>
-            </div>
-          )}
-        </div>
-
-        {/* Producción anual por cultivo */}
-        <div className="card">
-          <div className="card-title">Producción Anual por Cultivo</div>
-          {datosProduccionAnual.length > 0 && tiposCultivo.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={datosProduccionAnual}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="año" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip formatter={(v) => v.toFixed(0) + ' kg'} />
-                {tiposCultivo.map((cultivo, i) => (
-                  <Bar key={cultivo} dataKey={cultivo} fill={i === 0 ? vina : olivar} name={cultivo} radius={[4, 4, 0, 0]} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-text">Sin datos de producción</div>
-            </div>
-          )}
-        </div>
-
-        {/* Ingresos vs Gastos anuales */}
-        <div className="card">
-          <div className="card-title">Ingresos vs Gastos Anual</div>
-          {datosAnuales.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={datosAnuales}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="año" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip formatter={(v) => v.toFixed(2) + ' €'} />
-                <Bar dataKey="ingresos" fill={verdeCampo} name="Ingresos (€)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="gastos" fill={rojo} name="Gastos (€)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-text">Sin datos anuales</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Balance de campaña */}
-      {(() => {
-        // Campaña en curso, con su fecha de inicio real (Ajustes → Campañas)
-        const cal = calendarioCampanas(params)
-        const campanaActual = cal.campanaDe(new Date())
-        const { start: startDate, end: endDate } = cal.rango(campanaActual)
-        const isWithin = (d) => { const date = new Date(String(d).substring(0, 10) + 'T00:00:00'); return date >= startDate && date < endDate }
-
-        const ingCampana = ingresos.filter(i => i.fecha && isWithin(i.fecha)).reduce((s, i) => s + (i.cantidad || 0), 0)
-        const gastCampana = gastosCorrientes(gastos).filter(g => g.fecha && isWithin(g.fecha)).reduce((s, g) => s + (g.importe || 0), 0)
-        const costCampana = labores.filter(l => l.fecha && isWithin(l.fecha)).reduce((s, l) => s + (l.coste_total || 0), 0)
-        const balCampana = ingCampana - gastCampana - costCampana
-
-        const label = `${cal.etiqueta(campanaActual)} · en curso`
-
-        return (
-          <div className="card" style={{ borderColor: balCampana >= 0 ? 'var(--exito)' : 'var(--error)', marginTop: 16 }}>
-            <div className="card-title">Balance de Campaña</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--texto-suave)', marginBottom: 12 }}>{label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
-              <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--texto-suave)' }}>Ingresos</div>
-                <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--exito)' }}>{ingCampana.toFixed(0)} €</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--texto-suave)' }}>Gastos</div>
-                <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--error)' }}>{gastCampana.toFixed(0)} €</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--texto-suave)' }}>Costes</div>
-                <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.1rem', fontWeight: 700 }}>{costCampana.toFixed(0)} €</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: 12, background: 'var(--fondo)', borderRadius: 'var(--radio-campo)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--texto-suave)' }}>Balance</div>
-                <div style={{ fontFamily: 'var(--fuente-titulo)', fontSize: '1.1rem', fontWeight: 700, color: balCampana >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-                  {balCampana >= 0 ? '+' : '−'}{Math.abs(balCampana).toFixed(0)} €
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* Resumen rápido */}
-      <div className="card mt-24">
-        <div className="card-title">Resumen Rápido</div>
-        <div className="table-container">
-          <table className="data-table">
-            <thead><tr><th>Concepto</th><th>Valor</th></tr></thead>
-            <tbody>
-              <tr><td>Total fincas</td><td><strong>{fincas.length}</strong></td></tr>
-              <tr><td>Personal</td><td><strong>{personal.length}</strong></td></tr>
-              <tr><td>Maquinaria</td><td><strong>{maquinaria.length}</strong></td></tr>
-              <tr><td>Labores este mes</td><td><strong>{numLabores}</strong></td></tr>
-              <tr><td>Cosechas este mes</td><td><strong>{numCosechas}</strong></td></tr>
-              <tr><td>Producción</td><td><strong>{totalProduccion.toFixed(0)} kg</strong></td></tr>
-              {totalKilogrados > 0 && <tr><td>Kilogrados (viña)</td><td><strong>{totalKilogrados.toFixed(0)} kg°</strong></td></tr>}
-              {totalAceite > 0 && <tr><td>Aceite potencial</td><td><strong>{totalAceite.toFixed(0)} kg</strong></td></tr>}
-              <tr><td>Costes labores</td><td><strong>{totalCostesLabores.toFixed(2)} €</strong></td></tr>
-              <tr><td>Gastos manuales</td><td><strong>{totalGastos.toFixed(2)} €</strong></td></tr>
-              <tr><td>Ingresos</td><td><strong style={{ color: 'var(--exito)' }}>{totalIngresos.toFixed(2)} €</strong></td></tr>
-              <tr style={{ background: balanceContable >= 0 ? 'var(--exito-fondo)' : 'var(--error-fondo)' }}>
-                <td><strong>{balanceContable >= 0 ? 'Superávit' : 'Déficit'} (contable)</strong></td>
-                <td><strong style={{ color: balanceContable >= 0 ? 'var(--exito)' : 'var(--error)' }}>
-                  {balanceContable >= 0 ? '+' : '−'}{Math.abs(balanceContable).toFixed(2)} €
-                </strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {verDetalle && (
+        <Suspense fallback={<div className="empty-state"><div className="spinner" /></div>}>
+          <ResumenDetallado fincas={fincas} personal={personal} maquinaria={maquinaria} labores={labores} cosechas={cosechas} gastos={gastos} ingresos={ingresos} />
+        </Suspense>
+      )}
     </div>
   )
 }

@@ -1,12 +1,10 @@
 import { SECCIONES, seccionDePagina } from '../data/nav'
 import { getIcon } from '../utils/lucideIcons'
+import { irASeccion } from './TopBar'
 
-// Recuerda la última página visitada de cada bloque para volver a ella
-const ultimaPorSeccion = {}
-
+// Barra inferior del móvil: los 5 apartados siempre a mano (con el pulgar)
 function BottomNav({ currentPage, setCurrentPage }) {
   const actual = seccionDePagina(currentPage)
-  if (actual) ultimaPorSeccion[actual.id] = currentPage
 
   return (
     <nav className="bottom-nav" aria-label="Navegación principal">
@@ -18,10 +16,10 @@ function BottomNav({ currentPage, setCurrentPage }) {
               key={sec.id}
               type="button"
               className={`bottom-nav-item ${activa ? 'active' : ''}`}
-              onClick={() => setCurrentPage(activa ? sec.pages[0] : (ultimaPorSeccion[sec.id] || sec.pages[0]))}
+              onClick={() => irASeccion(sec, currentPage, setCurrentPage)}
               aria-current={activa ? 'page' : undefined}
             >
-              <span className="bottom-nav-icon" aria-hidden="true">{getIcon(sec.icon, { size: 22, strokeWidth: 2 })}</span>
+              <span className="bottom-nav-icon" aria-hidden="true">{getIcon(sec.icon, { size: 24, strokeWidth: activa ? 2.4 : 2 })}</span>
               <span>{sec.label}</span>
             </button>
           )

@@ -382,20 +382,12 @@ function InformesPage({ fincas, personal, maquinaria, params, destinos, preciosD
         <div className="form-row" style={{ alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1 }}>
             <label className="form-label">Tipo de período</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className={`btn ${periodType === 'fiscal' ? 'btn-primary' : 'btn-accent'}`}
-                style={{ flex: 1, borderStyle: periodType === 'fiscal' ? 'solid' : 'dashed' }}
-                onClick={() => setPeriodType('fiscal')}
-              >
-                📅 Fiscal (Ene-Dic)
+            <div className="chips" role="radiogroup" aria-label="Tipo de período">
+              <button type="button" role="radio" aria-checked={periodType === 'fiscal'} className={`chip${periodType === 'fiscal' ? ' sel' : ''}`} onClick={() => setPeriodType('fiscal')}>
+                Año natural (ene–dic)
               </button>
-              <button
-                className={`btn ${periodType === 'campana' ? 'btn-primary' : 'btn-accent'}`}
-                style={{ flex: 1, borderStyle: periodType === 'campana' ? 'solid' : 'dashed' }}
-                onClick={() => setPeriodType('campana')}
-              >
-                 Campaña
+              <button type="button" role="radio" aria-checked={periodType === 'campana'} className={`chip${periodType === 'campana' ? ' sel' : ''}`} onClick={() => setPeriodType('campana')}>
+                Campaña
               </button>
             </div>
           </div>
@@ -566,7 +558,7 @@ function InformesPage({ fincas, personal, maquinaria, params, destinos, preciosD
 
       {/* PRODUCCIÓN POR FINCA */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title"> 🌱 Producción por Finca</div>
+        <div className="card-title"> Producción por Finca</div>
         {produccionPorFinca.vina.length > 0 || produccionPorFinca.olivar.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {produccionPorFinca.vina.length > 0 && (

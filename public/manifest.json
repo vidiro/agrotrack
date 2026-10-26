@@ -1,12 +1,12 @@
 {
-  "name": "AGROtrack - Gestión Agrícola",
+  "name": "AGROtrack",
   "short_name": "AGROtrack",
-  "description": "Aplicación de gestión agrícola para fincas de viña y olivar",
+  "description": "El campo y sus papeles en el móvil: jornadas, tratamientos, facturas y ayudas. Funciona sin cobertura.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#1a472a",
-  "theme_color": "#1a472a",
+  "background_color": "#f6f1e4",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "/icon-192.png",
