@@ -7,7 +7,7 @@ import { guardarConCola } from '../../utils/offline'
 import { getParamValue } from '../../utils/params'
 import { eur } from '../../utils/formato'
 
-export const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Tratamiento fitosanitario', 'Vendimia', 'Cogida de aceitunas', 'Otros']
+export const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Tratamiento fitosanitario', 'Abonado', 'Vendimia', 'Cogida de aceitunas', 'Otros']
 const PASOS = ['fecha', 'fincas', 'trabajo', 'peones', 'maquina', 'resumen']
 
 export const nombreEquipo = (m) => [m.tipo, m.marca_modelo].filter(Boolean).join(' · ') || String(m.id_equipo)

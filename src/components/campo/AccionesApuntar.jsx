@@ -12,10 +12,12 @@ import JornadaWizard from './JornadaWizard'
 import TratamientoWizard from './TratamientoWizard'
 import FotoGastoWizard from './FotoGastoWizard'
 import NotaWizard from './NotaWizard'
+import AbonadoWizard from './AbonadoWizard'
+import { esFertilizante } from '../../utils/fertilizacion'
 
 export const ACCIONES = [
   { id: 'jornada', icono: 'ClipboardList', titulo: 'Jornada', sub: 'Quién, dónde y cuántas horas', color: 'verde' },
-  { id: 'tratamiento', icono: 'SprayCan', titulo: 'Tratamiento', sub: 'Va directo al cuaderno', color: 'vina' },
+  { id: 'tratamiento', icono: 'SprayCan', titulo: 'Tratamiento', sub: 'Fitosanitario o abono', color: 'vina' },
   { id: 'gasto', icono: 'Camera', titulo: 'Foto de factura', sub: 'Gasto o tique', color: 'trigo' },
   { id: 'nota', icono: 'StickyNote', titulo: 'Recordatorio', sub: 'Algo que hay que hacer', color: 'teja' },
 ]
@@ -35,11 +37,15 @@ async function cargarCatalogos() {
   const gastos = gas.data || []
   const unicos = (lista, clave) => [...new Map(lista.filter(x => x[clave]).map(x => [String(x[clave]).trim().toLowerCase(), x])).values()]
   const cat = {
-    productos: unicos(aplicaciones, 'producto').map(a => ({
+    productos: unicos(aplicaciones.filter(a => !esFertilizante(a)), 'producto').map(a => ({
       producto: a.producto, materia_activa: a.materia_activa, dosis: a.dosis, volumen_caldo: a.volumen_caldo,
       carencia_dias: a.carencia_dias, num_registro: a.num_registro,
     })),
-    plagas: unicos(aplicaciones, 'justificacion').map(a => a.justificacion),
+    abonos: unicos(aplicaciones.filter(esFertilizante), 'producto').map(a => ({
+      producto: a.producto, tipo_fertilizante: a.tipo_fertilizante, riqueza_n: a.riqueza_n, riqueza_p: a.riqueza_p, riqueza_k: a.riqueza_k,
+      dosis: a.dosis, unidad_dosis: a.unidad_dosis, metodo_aplicacion: a.metodo_aplicacion,
+    })),
+    plagas: unicos(aplicaciones.filter(a => !esFertilizante(a)), 'justificacion').map(a => a.justificacion),
     aplicadores: unicos(aplicaciones, 'aplicador').map(a => ({ aplicador: a.aplicador, carnet_aplicador: a.carnet_aplicador })),
     conceptos: unicos(gastos, 'concepto').map(g => g.concepto).filter(c => c.length <= 30).slice(0, 15),
     empresas: unicos(gastos, 'proveedor').map(g => ({ proveedor: g.proveedor, nif_proveedor: g.nif_proveedor })),
@@ -117,7 +123,8 @@ function AccionesApuntar({ modo = 'tiles', fincas, personal, maquinaria, params,
       )}
 
       {abierto === 'jornada' && <JornadaWizard {...props} />}
-      {abierto === 'tratamiento' && <TratamientoWizard {...props} />}
+      {abierto === 'tratamiento' && <TratamientoWizard {...props} onAbono={() => setAbierto('abonado')} />}
+      {abierto === 'abonado' && <AbonadoWizard {...props} />}
       {abierto === 'gasto' && <FotoGastoWizard {...props} />}
       {abierto === 'nota' && <NotaWizard {...props} />}
     </>

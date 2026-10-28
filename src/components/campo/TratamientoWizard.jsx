@@ -6,8 +6,9 @@ import { leerRecientes, recordar, recordarUso } from '../../utils/copiaLocal'
 import { laborDesdeSecciones } from '../../utils/costesLabor'
 import { guardarConCola } from '../../utils/offline'
 import { getParamValue } from '../../utils/params'
+import { getIcon } from '../../utils/lucideIcons'
 
-const PASOS = ['fecha', 'fincas', 'producto', 'dosis', 'aplicador', 'resumen']
+const PASOS = ['tipo', 'fecha', 'fincas', 'producto', 'dosis', 'aplicador', 'resumen']
 const num = (v) => parseFloat(String(v).replace(',', '.')) || 0
 
 function estadoInicial() {
@@ -22,7 +23,7 @@ function estadoInicial() {
 
 const campoGrande = { minHeight: 52, fontSize: '1rem' }
 
-function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, onCerrar, onGuardado }) {
+function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, onCerrar, onGuardado, onAbono }) {
   const [paso, setPaso] = useState(0)
   const [d, setD] = useState(estadoInicial)
   const [guardando, setGuardando] = useState(false)
@@ -52,7 +53,7 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
   }
 
   const puedeSeguir = {
-    fecha: !!d.fecha, fincas: d.fincas.length > 0, producto: !!d.producto.trim(), dosis: true, aplicador: true, resumen: true,
+    tipo: true, fecha: !!d.fecha, fincas: d.fincas.length > 0, producto: !!d.producto.trim(), dosis: true, aplicador: true, resumen: true,
   }[PASOS[paso]]
 
   const guardar = async () => {
@@ -132,16 +133,32 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
       paso={paso}
       onCerrar={onCerrar}
       onAtras={() => setPaso(paso - 1)}
-      pie={(
+      pie={PASOS[paso] === 'tipo' ? null : (
         <button type="button" className="btn btn-primary" disabled={!puedeSeguir || guardando} onClick={() => (paso === PASOS.length - 1 ? guardar() : setPaso(paso + 1))}>
           {paso === PASOS.length - 1 ? (guardando ? 'Guardando…' : 'Guardar tratamiento') : 'Siguiente'}
         </button>
       )}
     >
+      {PASOS[paso] === 'tipo' && (
+        <>
+          <h3 className="asistente-pregunta">¿Qué has echado?</h3>
+          <div className="acciones-grid" style={{ gridTemplateColumns: '1fr' }}>
+            <button type="button" className="accion accion-vina" style={{ minHeight: 0, flexDirection: 'row', alignItems: 'center' }} onClick={() => setPaso(1)}>
+              <span className="accion-icono">{getIcon('SprayCan', { size: 28 })}</span>
+              <span className="accion-texto"><strong>Fitosanitario</strong><span>Contra plagas o enfermedades (lleva plazo de seguridad)</span></span>
+            </button>
+            <button type="button" className="accion accion-verde" style={{ minHeight: 0, flexDirection: 'row', alignItems: 'center' }} onClick={() => onAbono?.()}>
+              <span className="accion-icono">{getIcon('Sprout', { size: 28 })}</span>
+              <span className="accion-texto"><strong>Abono</strong><span>Fertilizante, estiércol, foliar…</span></span>
+            </button>
+          </div>
+        </>
+      )}
+
       {PASOS[paso] === 'fecha' && (
         <>
           <h3 className="asistente-pregunta">¿Qué día se trató?</h3>
-          <SelectorFecha valor={d.fecha} onChange={v => set({ fecha: v })} onRapido={() => setTimeout(() => setPaso(1), 150)} />
+          <SelectorFecha valor={d.fecha} onChange={v => set({ fecha: v })} onRapido={() => setTimeout(() => setPaso(2), 150)} />
         </>
       )}
 

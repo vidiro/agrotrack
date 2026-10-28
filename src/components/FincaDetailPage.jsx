@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Inbox } from 'lucide-react'
 import { fetchAll } from '../utils/fetchAll'
 import { gastosCorrientes, gastosInversion, esGastoInversion } from '../utils/gastos'
+import { esFertilizante, textoNPK } from '../utils/fertilizacion'
 import { laborIncluyeFinca, repartoLabor } from '../utils/labores'
 import { getParamValue } from '../utils/params'
 import { format, subMonths } from 'date-fns'
@@ -253,19 +254,19 @@ function FincaDetailPage({ fincas, personal, maquinaria, params, destinos, preci
 
           {/* Sección: Aplicaciones fitosanitarias */}
           <div className="card">
-            <div className="card-title"> Aplicaciones Fitosanitarias ({stats.numAplicaciones})</div>
+            <div className="card-title"> Tratamientos y abonados ({stats.numAplicaciones})</div>
             {aplicaciones.length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
                   <thead>
-                    <tr><th>Producto</th><th>Materia activa</th><th>Dosis</th><th>Carencia</th></tr>
+                    <tr><th>Producto</th><th>Materia activa / riqueza</th><th>Dosis</th><th>Carencia</th></tr>
                   </thead>
                   <tbody>
                     {aplicaciones.slice(0, 20).map(a => (
                       <tr key={a.id_aplicacion}>
-                        <td>{a.producto || '—'}</td>
-                        <td>{a.materia_activa || '—'}</td>
-                        <td>{a.dosis ? `${a.dosis}` : '—'}</td>
+                        <td>{a.producto || '—'}{esFertilizante(a) && <span className="badge badge-green" style={{ marginLeft: 6 }}>Abono</span>}</td>
+                        <td>{esFertilizante(a) ? (textoNPK(a) || '—') : (a.materia_activa || '—')}</td>
+                        <td>{a.dosis ? `${a.dosis}${esFertilizante(a) ? ` ${a.unidad_dosis || 'kg/ha'}` : ''}` : '—'}</td>
                         <td>{a.carencia_dias ? `${a.carencia_dias} días` : '—'}</td>
                       </tr>
                     ))}

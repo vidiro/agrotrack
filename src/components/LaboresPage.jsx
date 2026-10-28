@@ -24,7 +24,7 @@ function LaboresPage({ fincas, personal, maquinaria, params, onDataChange }) {
   // Precio del gasoil desde params
   const precioGasoilL = getParamValue(params, ['precio_gasoil_l', 'coste_gasoleo'], 0)
 
-  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Tratamiento fitosanitario', 'Vendimia', 'Cogida de aceitunas', 'Otros']
+  const TIPOS_TRABAJO = ['Poda', 'Descogollo', 'Despiojo', 'Limpia', 'Chupones', 'Trabajos con tractor', 'Tratamiento fitosanitario', 'Abonado', 'Vendimia', 'Cogida de aceitunas', 'Otros']
 
   // Formulario: una jornada con múltiples secciones
   // secciones: [{ tipo_trabajo, fincas: [{ id_finca, peones: [{ id_operario, horas }] }], maquinaria: [{ id_equipo, horas }], include_gasoil }]

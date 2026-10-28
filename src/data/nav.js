@@ -25,7 +25,7 @@ export const PAGES = {
   informes: { icon: 'BarChart3', label: 'Informes' },
   expedientes: { icon: 'FolderOpen', label: 'Ayudas' },
   vencimientos: { icon: 'CalendarClock', label: 'Vencimientos' },
-  cuaderno: { icon: 'BookOpen', label: 'Cuaderno tratamientos' },
+  cuaderno: { icon: 'BookOpen', label: 'Cuaderno de campo' },
   jornadas: { icon: 'Clock', label: 'Jornadas' },
   gestoria: { icon: 'Briefcase', label: 'Gestoría' },
   // Otros

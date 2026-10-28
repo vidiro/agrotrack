@@ -6,8 +6,9 @@ import { fechaES } from '../utils/formato'
 import { downloadCSV } from '../utils/csvExport'
 import { useExplotacion, lineaTitular } from '../utils/explotacion'
 import { Avisos, Cargando, Vacio, Cabecera } from './ui'
+import { esFertilizante, aportes, textoNPK } from '../utils/fertilizacion'
 
-// Registro de tratamientos fitosanitarios (cuaderno de campo) a partir de Tratamientos + Labores
+// Cuaderno de explotación: tratamientos fitosanitarios y fertilización, a partir de Tratamientos + Labores
 function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
   const [aplicaciones, setAplicaciones] = useState([])
   const [labores, setLabores] = useState([])
@@ -15,6 +16,7 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
   const [error, setError] = useState('')
   const [anio, setAnio] = useState(String(new Date().getFullYear()))
   const [finca, setFinca] = useState('')
+  const [vista, setVista] = useState('fito') // fito | fert
   const { explotacion } = useExplotacion()
 
   useEffect(() => {
@@ -27,7 +29,7 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
     })()
   }, [])
 
-  const filas = useMemo(() => {
+  const filasTodas = useMemo(() => {
     const porId = new Map(labores.map(l => [String(l.id_labor), l]))
     return aplicaciones.map(a => {
       const l = porId.get(String(a.id_labor))
@@ -54,12 +56,35 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
         carnet: a.carnet_aplicador || '',
         equipo: equipo ? `${equipo.tipo}${equipo.marca_modelo ? ' ' + equipo.marca_modelo : ''}` : '',
         observaciones: a.observaciones || '',
+        esAbono: esFertilizante(a),
+        tipoFert: a.tipo_fertilizante || '',
+        npk: textoNPK(a),
+        dosisTxt: a.dosis != null ? `${a.dosis} ${a.unidad_dosis || 'kg/ha'}` : '',
+        aporte: aportes(a, a.superficie_ha ?? (fs.reduce((s, f) => s + (parseFloat(f.superficie_total_ha) || 0), 0) || 0)),
+        metodo: a.metodo_aplicacion || '',
       }
     })
       .filter(f => !anio || String(f.fecha).startsWith(anio))
       .filter(f => !finca || f.ids.includes(finca))
       .sort((x, y) => String(x.fecha).localeCompare(String(y.fecha)))
   }, [aplicaciones, labores, fincas, maquinaria, anio, finca])
+  const filas = filasTodas.filter(f => !f.esAbono)
+  const abonados = filasTodas.filter(f => f.esAbono)
+
+  // Aportes del año por finca (kg/ha y total)
+  const porFinca = useMemo(() => {
+    const m = new Map()
+    for (const f of abonados) {
+      for (const id of f.ids) {
+        const fi = fincas.find(x => String(x.id_finca) === id)
+        if (!fi) continue
+        const r = m.get(id) || { nombre: fi.nombre, ha: parseFloat(fi.superficie_total_ha) || 0, n: 0, p: 0, k: 0 }
+        r.n += f.aporte.n; r.p += f.aporte.p; r.k += f.aporte.k
+        m.set(id, r)
+      }
+    }
+    return [...m.values()].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'))
+  }, [abonados, fincas])
 
   const anios = [...new Set([String(new Date().getFullYear()), ...aplicaciones.map(a => String(a.fecha_aplicacion || labores.find(l => String(l.id_labor) === String(a.id_labor))?.fecha || '').substring(0, 4)).filter(Boolean)])].sort().reverse()
 
@@ -73,6 +98,50 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
         plaga_o_justificacion: f.plaga, producto: f.producto, materia_activa: f.materia, num_registro: f.registro, dosis: f.dosis,
         volumen_caldo_l_ha: f.caldo, plazo_seguridad: f.carencia, aplicador: f.aplicador, carne_aplicador: f.carnet, equipo: f.equipo, observaciones: f.observaciones,
       })))
+  }
+
+  const exportarCSVAbonos = () => {
+    downloadCSV(`cuaderno_fertilizacion_${anio || 'todo'}`,
+      ['fecha', 'parcelas', 'municipio', 'cultivo', 'superficie_ha', 'tipo_fertilizante', 'producto', 'riqueza_n_p2o5_k2o', 'dosis', 'cantidad_total_kg', 'n_kg_ha', 'p2o5_kg_ha', 'k2o_kg_ha', 'forma_aplicacion', 'aplicador', 'equipo', 'observaciones'],
+      abonados.map(f => ({
+        fecha: fechaES(f.fecha), parcelas: f.parcelas, municipio: f.municipio, cultivo: f.cultivo, superficie_ha: f.superficie,
+        tipo_fertilizante: f.tipoFert, producto: f.producto, riqueza_n_p2o5_k2o: f.npk, dosis: f.dosisTxt, cantidad_total_kg: f.aporte.kgTotales,
+        n_kg_ha: f.aporte.n, p2o5_kg_ha: f.aporte.p, k2o_kg_ha: f.aporte.k, forma_aplicacion: f.metodo, aplicador: f.aplicador, equipo: f.equipo, observaciones: f.observaciones,
+      })))
+  }
+
+  const exportarPDFAbonos = async () => {
+    const [{ jsPDF }, { applyPlugin }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+    applyPlugin(jsPDF)
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const W = doc.internal.pageSize.getWidth()
+    doc.setFontSize(14)
+    doc.text('Registro de fertilización', 10, 12)
+    doc.setFontSize(9)
+    doc.text([lineaTitular(explotacion) || 'Titular: ____________________', `Año ${anio || 'todos'}${finca ? ' · ' + (fincas.find(f => String(f.id_finca) === finca)?.nombre || '') : ''}`].join('   ·   '), 10, 18)
+    doc.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, W - 10, 18, { align: 'right' })
+    doc.autoTable({
+      startY: 22,
+      head: [['Fecha', 'Parcela(s)', 'Cultivo', 'Sup. (ha)', 'Tipo', 'Abono', 'N-P₂O₅-K₂O (%)', 'Dosis', 'Total (kg)', 'N kg/ha', 'P₂O₅ kg/ha', 'K₂O kg/ha', 'Forma', 'Aplicador']],
+      body: abonados.map(f => [fechaES(f.fecha), f.parcelas, f.cultivo, f.superficie === '' ? '' : String(f.superficie), f.tipoFert, f.producto, f.npk, f.dosisTxt, String(f.aporte.kgTotales || ''), String(f.aporte.n), String(f.aporte.p), String(f.aporte.k), f.metodo, f.aplicador]),
+      theme: 'grid',
+      headStyles: { fillColor: [31, 77, 51], fontSize: 7 },
+      bodyStyles: { fontSize: 6.5, cellPadding: 1.4, overflow: 'linebreak' },
+      margin: { left: 10, right: 10 },
+    })
+    if (porFinca.length) {
+      doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [['Finca', 'N (kg/ha)', 'P₂O₅ (kg/ha)', 'K₂O (kg/ha)']],
+        body: porFinca.map(r => [r.nombre, r.n.toFixed(1), r.p.toFixed(1), r.k.toFixed(1)]),
+        theme: 'grid',
+        headStyles: { fillColor: [31, 77, 51], fontSize: 7 },
+        bodyStyles: { fontSize: 7 },
+        margin: { left: 10 },
+        tableWidth: 120,
+      })
+    }
+    doc.save(`cuaderno_fertilizacion_${anio || 'todo'}.pdf`)
   }
 
   const exportarPDF = async () => {
@@ -103,10 +172,24 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
   return (
     <div>
       <Avisos error={error} />
-      <Cabecera titulo="Cuaderno de tratamientos" descripcion="Registro de tratamientos fitosanitarios para inspecciones, a partir de lo que apuntas en Tratamientos.">
-        <button type="button" className="btn btn-accent" onClick={exportarCSV} disabled={!filas.length}><Download size={16} aria-hidden="true" /> CSV</button>
-        <button type="button" className="btn btn-primary" onClick={exportarPDF} disabled={!filas.length}><FileDown size={16} aria-hidden="true" /> PDF</button>
+      <Cabecera titulo="Cuaderno de campo" descripcion="Tratamientos fitosanitarios y abonados, listos para una inspección. Se rellena con lo que apuntas en Tratamientos.">
+        {vista === 'fito' ? (
+          <>
+            <button type="button" className="btn btn-accent" onClick={exportarCSV} disabled={!filas.length}><Download size={16} aria-hidden="true" /> CSV</button>
+            <button type="button" className="btn btn-primary" onClick={exportarPDF} disabled={!filas.length}><FileDown size={16} aria-hidden="true" /> PDF</button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn btn-accent" onClick={exportarCSVAbonos} disabled={!abonados.length}><Download size={16} aria-hidden="true" /> CSV</button>
+            <button type="button" className="btn btn-primary" onClick={exportarPDFAbonos} disabled={!abonados.length}><FileDown size={16} aria-hidden="true" /> PDF</button>
+          </>
+        )}
       </Cabecera>
+
+      <div className="chips" role="tablist" aria-label="Apartado del cuaderno" style={{ marginBottom: 12 }}>
+        <button type="button" role="tab" aria-selected={vista === 'fito'} className={`chip${vista === 'fito' ? ' sel' : ''}`} onClick={() => setVista('fito')}>Fitosanitarios ({filas.length})</button>
+        <button type="button" role="tab" aria-selected={vista === 'fert'} className={`chip${vista === 'fert' ? ' sel' : ''}`} onClick={() => setVista('fert')}>Fertilización ({abonados.length})</button>
+      </div>
 
       <div className="flex gap-12 mb-16 flex-wrap">
         <select className="form-select" style={{ width: 'auto' }} value={anio} onChange={e => setAnio(e.target.value)} aria-label="Año">
@@ -122,7 +205,7 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
       {!explotacion.nif_titular && (
         <div className="alert alert-info">Pon tu nombre y NIF en <button type="button" onClick={() => onNavigate?.('configuracion')} style={{ background: 'none', border: 'none', padding: 0, textDecoration: 'underline', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>Ajustes</button> para que salgan en la cabecera del cuaderno.</div>
       )}
-      {incompletas > 0 && (
+      {vista === 'fito' && incompletas > 0 && (
         <div className="alert alert-warning" style={{ background: 'var(--aviso-fondo)', border: '1px solid var(--aviso)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
           {incompletas} {incompletas === 1 ? 'tratamiento no tiene' : 'tratamientos no tienen'} todos los datos (nº de registro, aplicador, carné o superficie tratada). Complétalos en{' '}
           <button type="button" onClick={() => onNavigate?.('aplicaciones')} style={{ background: 'none', border: 'none', padding: 0, textDecoration: 'underline', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>Tratamientos</button>.
@@ -130,7 +213,57 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
         </div>
       )}
 
-      <div className="card">
+      {vista === 'fert' && (
+        <>
+          <div className="card">
+            <div className="card-title">Abonados ({abonados.length})</div>
+            {abonados.length === 0 ? (
+              <Vacio texto="No hay abonados para este filtro. Apúntalos en Tratamientos → Abonados o desde el móvil con «Tratamiento → Abono»." />
+            ) : (
+              <div className="table-container">
+                <table className="data-table">
+                  <thead><tr><th>Fecha</th><th>Parcela(s)</th><th>Cultivo</th><th>Sup. (ha)</th><th>Abono</th><th>N-P-K</th><th>Dosis</th><th>N kg/ha</th><th>Forma</th></tr></thead>
+                  <tbody>
+                    {abonados.map(f => (
+                      <tr key={f.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{fechaES(f.fecha)}</td>
+                        <td style={{ fontSize: 13 }}>{f.parcelas}</td>
+                        <td>{f.cultivo}</td>
+                        <td>{f.superficie === '' ? '—' : `${f.superficie}${f.superficieEstimada ? '*' : ''}`}</td>
+                        <td>{f.producto}<div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{f.tipoFert}</div></td>
+                        <td style={{ color: f.npk ? undefined : 'var(--color-danger)' }}>{f.npk || 'Falta'}</td>
+                        <td>{f.dosisTxt || '—'}</td>
+                        <td>{f.aporte.n || '—'}</td>
+                        <td>{f.metodo || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {porFinca.length > 0 && (
+            <div className="card">
+              <div className="card-title">Nutrientes aportados por finca{anio ? ` en ${anio}` : ''}</div>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead><tr><th>Finca</th><th>N (kg/ha)</th><th>P₂O₅ (kg/ha)</th><th>K₂O (kg/ha)</th></tr></thead>
+                  <tbody>
+                    {porFinca.map(r => (
+                      <tr key={r.nombre}><td>{r.nombre}</td><td><strong>{r.n.toFixed(1)}</strong></td><td>{r.p.toFixed(1)}</td><td>{r.k.toFixed(1)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
+                Suma de las unidades fertilizantes de cada abonado. Útil para el plan de abonado y para no pasarse de nitrógeno en zonas vulnerables.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {vista === 'fito' && <div className="card">
         <div className="card-title">Tratamientos ({filas.length})</div>
         {filas.length === 0 ? (
           <Vacio texto="No hay tratamientos para este filtro." />
@@ -156,7 +289,7 @@ function CuadernoPage({ fincas = [], maquinaria = [], onNavigate }) {
             </table>
           </div>
         )}
-      </div>
+      </div>}
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
         * Superficie de la finca completa (no se indicó la superficie tratada). El formato oficial del cuaderno puede variar según la comunidad autónoma: revisa que tenga lo que te piden.
       </p>
