@@ -194,3 +194,9 @@ export function Resumen({ filas }) {
 }
 
 export const nombreFinca = (fincas, id) => fincas.find(f => String(f.id_finca) === String(id))?.nombre || ''
+
+/** Hectáreas de las fincas marcadas, como texto para un campo («10,8») */
+export function haDeFincas(fincas, ids) {
+  const ha = (ids || []).reduce((s, id) => s + (parseFloat(fincas.find(f => String(f.id_finca) === String(id))?.superficie_total_ha) || 0), 0)
+  return ha ? String(Math.round(ha * 100) / 100).replace('.', ',') : ''
+}

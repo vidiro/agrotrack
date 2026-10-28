@@ -1,6 +1,6 @@
 // Apuntar un tratamiento en el campo: queda en Labores y en el Cuaderno de tratamientos
 import { useState } from 'react'
-import { Asistente, Chips, Stepper, SelectorFecha, SelectorFincas, PantallaHecho, Resumen, hoy, fechaLarga, nombreFinca } from './Asistente'
+import { Asistente, Chips, Stepper, SelectorFecha, SelectorFincas, PantallaHecho, Resumen, hoy, fechaLarga, nombreFinca, haDeFincas } from './Asistente'
 import { nombreEquipo } from './JornadaWizard'
 import { leerRecientes, recordar, recordarUso } from '../../utils/copiaLocal'
 import { laborDesdeSecciones } from '../../utils/costesLabor'
@@ -29,6 +29,7 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [hecho, setHecho] = useState(null)
+  const [supManual, setSupManual] = useState(false) // si se cambia a mano, ya no se recalcula al marcar fincas
   const set = (c) => setD(prev => ({ ...prev, ...c }))
   const productos = catalogos?.productos || []
   const plagas = catalogos?.plagas || []
@@ -112,7 +113,7 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
         <PantallaHecho
           encolado={hecho.encolado}
           texto="Guardado en Labores y en el Cuaderno de tratamientos."
-          onOtra={() => { setD(estadoInicial()); setPaso(0); setHecho(null) }}
+          onOtra={() => { setD(estadoInicial()); setPaso(0); setHecho(null); setSupManual(false) }}
           onCerrar={onCerrar}
         />
       </Asistente>
@@ -165,7 +166,7 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
       {PASOS[paso] === 'fincas' && (
         <>
           <h3 className="asistente-pregunta">¿Qué fincas?</h3>
-          <SelectorFincas fincas={fincas} valor={d.fincas} onChange={v => set({ fincas: v })} />
+          <SelectorFincas fincas={fincas} valor={d.fincas} onChange={v => set(supManual ? { fincas: v } : { fincas: v, superficie_ha: haDeFincas(fincas, v) })} />
         </>
       )}
 
@@ -239,7 +240,10 @@ function TratamientoWizard({ fincas, personal, maquinaria, params, catalogos, on
           <div className="asistente-sub">Horas</div>
           <Stepper valor={d.horas} onChange={v => set({ horas: v })} />
           <div className="asistente-sub">Superficie tratada (ha)</div>
-          <input className="form-input" style={campoGrande} inputMode="decimal" value={d.superficie_ha} placeholder={haFincas ? `${Math.round(haFincas * 100) / 100} (toda la finca)` : ''} onChange={e => set({ superficie_ha: e.target.value })} aria-label="Superficie tratada" />
+          <input className="form-input" style={campoGrande} inputMode="decimal" value={d.superficie_ha} onChange={e => { setSupManual(true); set({ superficie_ha: e.target.value }) }} aria-label="Superficie tratada" />
+          <p className="text-muted text-sm" style={{ marginTop: 6 }}>
+            {!supManual && d.superficie_ha ? 'Es la superficie de las fincas que has marcado. Cámbiala solo si no has tratado la finca entera.' : 'Pon solo la parte que has tratado.'}
+          </p>
         </>
       )}
 
